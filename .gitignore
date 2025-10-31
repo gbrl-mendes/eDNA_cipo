@@ -2,3 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+tcc_eDNA_cipo/
+results/tree/
+data/old/
+results/figures/old/
+results/tables/old/
+results/scripts/old/
+results/scripts/curadoria_integrativa/old/
