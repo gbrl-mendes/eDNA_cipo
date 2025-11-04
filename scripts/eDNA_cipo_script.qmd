@@ -37,7 +37,7 @@ library("colorspace")
 
     ```{r}
     {
-      prjct_path <- "/home/isav/projetos/tcc_eDNA_cipo"
+      prjct_path <- "/home/gabriel/projetos/eDNA_cipo"
       prjct_radical <- "eDNA_cipo"
       scripts_path <- paste0(prjct_path, "/scripts")
       results_path <- paste0(prjct_path, "/results")
@@ -70,7 +70,7 @@ library("colorspace")
     ```{r}
     # resultados preliminares
     raw_pre_results <-
-      read.csv("/home/isav/projetos/tcc_eDNA_cipo/data/resultados_completos_cipo.csv",
+      read.csv("/home/gabriel/projetos/eDNA_cipo/data/resultados_completos_cipo.csv",
                sep = ",",
                check.names = FALSE) %>%
       mutate(`Metadata 1` = ifelse(`Metadata 1` == "", Sample,
@@ -80,7 +80,7 @@ library("colorspace")
       as_tibble()
     ```
 
-#### Filtragem dos dados preliminares
+#### Filtragens
 
 -   Realização da filtragem taxonômica e de qualidade preliminar. Remoção de ASVs com tamanho fora do esperado para os amplicons (entre 120 e 240pb), sequências sem identificação, sequências de grupos taxonômicos diferentes de peixes e sequências encontradas nos controles de filtragem e extração.
 
@@ -377,7 +377,7 @@ library("colorspace")
       print()
     ```
 
--   Tile plot preliminar para análise das espécies por ponto
+-   Tile plot preliminar para análise das espécies por amostra
 
     ```{r}
     # Definir ordem de especies para o plot
@@ -385,7 +385,7 @@ library("colorspace")
       sort(unique(pre_taxa_filt_longer$`Taxon (Final ID)`))
 
     # Plot
-    tile_plot_pre_taxa <-
+    tile_plot_pre <-
     pre_taxa_filt_longer %>%
       mutate(`Taxon (Final ID)` = factor(`Taxon (Final ID)`,
                                          levels = rev(spp_levels))) %>%  
@@ -447,18 +447,18 @@ library("colorspace")
     #        width = 35,
     #        dpi = 1200)
 
-    tile_plot_pre_taxa
+    tile_plot_pre
     ```
 
 ### Análise dos dados curados
 
-#### Obtenção de dados curados
+#### Obtenção dos dados
 
 -   Dados com as identificações curadas (Curated IDs) após a verificação na literatura e análise de especialistas.
 
     ```{r}
     raw_curated_results <-
-      read.csv("/home/isav/projetos/tcc_eDNA_cipo/data/resultados_completos-eDNA_Cipo-301025.csv",
+      read.csv("/home/gabriel/projetos/eDNA_cipo/data/resultados_completos-eDNA_Cipo-301025.csv",
                sep = ",",
                check.names = FALSE) %>%
        mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>% 
@@ -520,7 +520,7 @@ library("colorspace")
                 by = join_by(`Genus (Curated ID)`))
     ```
 
-#### Filtragem dos dados curados
+#### Filtragens 
 
 -   Realização da filtragem taxonômica e de qualidade pós-curadoria: remoção de ASVs com tamanho fora do esperado para os amplicons (entre 120 e 240pb), sequências sem identificação, sequências de grupos taxonômicos diferentes de peixes, sequências encontradas nos controles de filtragem e extração, sequências consideradas contaminação e sequências com nível taxonômico abaixo de gênero.
 
@@ -535,7 +535,7 @@ library("colorspace")
              `Metadata 7` == "ok") # apenas a nivel de genero e especie 
     ```
 
-#### Refinamento dos dados
+#### Refinamentos
 
 -   Remoção de colunas sem uso.
 
@@ -585,13 +585,23 @@ library("colorspace")
     curated_results
     ```
 
+-   Inclusão de metadados
+
+    ```{r}
+    meta_data <-
+      tibble("metadata 1" = c("SC1", "SC2", "SC3", "SC4", "SC5", "SC6", "SC7"),
+             "elevation" = c(859, 812, 800, 1006, 784, 989, 752))
+    
+    ```
+
+
 #### Evolução das reads
 
 -   Quantificação de paired-end reads geradas por Local no sequenciamento.
 
     ```{r}
     seq_read_counts <- 
-      read.csv("/home/isav/projetos/tcc_eDNA_cipo/data/reads_n_seq_counts_eDNA_cipo.csv",
+      read.csv("/home/gabriel/projetos/eDNA_cipo/data/reads_n_seq_counts_eDNA_cipo.csv",
                sep = ",",
                check.names = FALSE) %>%
       as_tibble() %>% 
@@ -681,7 +691,7 @@ library("colorspace")
               ) %>%
       select(-c(Sample)) %>% 
       unique() %>% 
-      print(n = 21)
+      print()
     ```
 
 -   Quantificação de reads que sobreviveram à curadoria integrativa.
@@ -723,7 +733,7 @@ library("colorspace")
               ) %>%
       select(-c(Sample)) %>% 
       unique() %>% 
-      print(n = 21)
+      print()
     ```
 
 #### Análise dos dados removidos
@@ -998,9 +1008,9 @@ library("colorspace")
       print()
 
     # Exporting table for the paper
-    write.csv(order_stats,
-              paste0(tbl_path, "/order_stats", "-",
-                     Sys.Date(), ".csv", sep = ""))
+    # write.csv(order_stats,
+    #           paste0(tbl_path, "/order_stats", "-",
+    #                  Sys.Date(), ".csv", sep = ""))
     ```
 
 -   Número total de reads, ASVs, Ordens, Famílias, Gênero, Espécies e N-Espécies pós-curadoria por *Família.*
@@ -1024,9 +1034,9 @@ library("colorspace")
       print()
 
     # Exporting table for the paper
-    write.csv(family_stats,
-              paste0(tbl_path, "/family_stats", "-",
-                     Sys.Date(), ".csv", sep = ""))
+    # write.csv(family_stats,
+    #           paste0(tbl_path, "/family_stats", "-",
+    #                  Sys.Date(), ".csv", sep = ""))
     ```
 
 -   Listando identificações em cada nível taxonômico após a curadoria
@@ -1061,15 +1071,15 @@ library("colorspace")
       print()
 
     # Exporting table for the paper
-    write.csv(spp_tax_levels,
-              paste0(tbl_path, "/spp_tax_levels", "-",
-                     Sys.Date(), ".csv", sep = ""))
+    # write.csv(spp_tax_levels,
+    #           paste0(tbl_path, "/spp_tax_levels", "-",
+    #                  Sys.Date(), ".csv", sep = ""))
     ```
 
 -   Identificando singletons
 
     ```{r}
-    # Singletons em Locals
+    # Singletons em amostras
     counts_sample <- 
       curated_results %>%
       group_by(`Curated ID`) %>%
@@ -1168,9 +1178,9 @@ library("colorspace")
                "SC7C_Reads", "SC7C_ASVs", "SC7C_OTUs", "SC7C_%")
 
     # Exporting table for the paper
-    write_xlsx(wider_dt_all_resume,
-               paste0(tbl_path, "/wider_dt_all_resume", "-",
-                     Sys.Date(), ".xlsx", sep = ""))
+    # write_xlsx(wider_dt_all_resume,
+    #            paste0(tbl_path, "/wider_dt_all_resume", "-",
+    #                  Sys.Date(), ".xlsx", sep = ""))
 
     wider_dt_all_resume
     ```
@@ -1234,9 +1244,9 @@ library("colorspace")
                "SC7C_Reads", "SC7C_ASVs", "SC7C_OTUs", "SC7C_%")
 
     # Exporting table for the paper
-    write_xlsx(wider_dt_summ_resume,
-               paste0(tbl_path, "/wider_dt_summ_resume", "-",
-                     Sys.Date(), ".xlsx", sep = ""))
+    # write_xlsx(wider_dt_summ_resume,
+    #            paste0(tbl_path, "/wider_dt_summ_resume", "-",
+    #                  Sys.Date(), ".xlsx", sep = ""))
 
     wider_dt_summ_resume
     ```
@@ -1332,13 +1342,9 @@ library("colorspace")
                  values_from = Reads) %>% 
       mutate(across(c(3:ncol(.)), ~ replace_na(., 0))) %>% 
       print()
-    
-    # Exporting table for the paper
-    write.csv(taxa_sample_wider, paste0(tbl_path, "/taxa_sample_wider", "-",
-                               Sys.Date(), ".csv", sep = ""))
 
         # Lista em formato wider (agrupado por local)
-    taxa_sample_wider <- 
+    taxa_site_wider <- 
     curated_results %>%
       select(`ASV absolute abundance`,
              `Metadata 1`,
@@ -1381,8 +1387,8 @@ library("colorspace")
       select(-c(`Curated ID`))
 
     # Exporting table for the paper
-    write.csv(taxa_summ, paste0(tbl_path, "/taxa_summ_tbl", "-",
-                               Sys.Date(), ".csv", sep = ""))
+    # write.csv(taxa_summ, paste0(tbl_path, "/taxa_summ_tbl", "-",
+    #                            Sys.Date(), ".csv", sep = ""))
 
     taxa_summ
     ```
@@ -1451,13 +1457,13 @@ library("colorspace")
            y = "Taxa")
 
     # Salvar figura
-    ggsave(plot = tile_plot_sample,
-           filename = paste0(figs_path, "/tile_plot_sample", "_",
-                             Sys.Date(), ".pdf"),
-           units = "cm",
-           height = 35,
-           width = 35,
-           dpi = 1200)
+    # ggsave(plot = tile_plot_sample,
+    #        filename = paste0(figs_path, "/tile_plot_sample", "_",
+    #                          Sys.Date(), ".pdf"),
+    #        units = "cm",
+    #        height = 35,
+    #        width = 35,
+    #        dpi = 1200)
 
     tile_plot_sample
     ```
@@ -1522,13 +1528,13 @@ library("colorspace")
            y = "Taxa")
 
     # Salvar figura
-    ggsave(plot = tile_plot_site,
-           filename = paste0(figs_path, "/tile_plot_site", "_",
-                             Sys.Date(), ".pdf"),
-           units = "cm",
-           height = 35,
-           width = 25,
-           dpi = 1200)
+    # ggsave(plot = tile_plot_site,
+    #        filename = paste0(figs_path, "/tile_plot_site", "_",
+    #                          Sys.Date(), ".pdf"),
+    #        units = "cm",
+    #        height = 35,
+    #        width = 25,
+    #        dpi = 1200)
 
     tile_plot_site
     ```
@@ -1548,6 +1554,21 @@ library("colorspace")
     }
       return(suniq)
       }
+    ```
+
+-   Colors
+
+    ```{r}
+    # For each sample
+    sample_colors <- c("#A49121", 
+                        "#00A791", 
+                        "#4C95F7", 
+                        "#EA6292", 
+                        "#45903E", 
+                        "#00B7E2", 
+                        "#A767BE")
+    
+    all_colors <- c("#EC8A3A")
     ```
 
 #### PCoA
@@ -1773,29 +1794,97 @@ library("colorspace")
 -   Generate species accumulation curves to assess how richness increases with the number of samples, calculated for all samples combined and separately for high and low water levels.
 
     ```{r}
-    # Calculate accumulation curve for all sites
+    # Calculo de curva do coletor para todos os locais
 
-    # Prepare data: jaccarizing data 
+    #1 Binary function (presence/absence)
     jaccarize <- function(x) {
       ifelse(x == 0, 0, 1)
       }
-
+    #2 Transform abundances to binary data
     taxa_sample_wider_jac  <- 
       taxa_sample_wider  %>%
       mutate(across(c(3:ncol(.)), 
                     jaccarize))
-
-    accum_sites <- 
+    
+    #3 Collector curve
+    accum_samples <- 
       specaccum(taxa_sample_wider_jac[3:ncol(taxa_sample_wider_jac)],
-                method = "random",
-                permutations = 999)
-       
-    accum_sites_df <- 
-      tibble("Sites" = c(0, accum_sites$sites),
-             "Richness" = c(0, accum_sites$richness),
-             "sd" = c(0, accum_sites$sd))
-        
-    # Calcular para cada ponto
+                # method = "random",
+                method = "random")
+                # permutations = 999)
+    
+    # Richness per site to tibble
+    accum_samples_df <-
+      tibble(Sample = accum_samples$sites,
+             Richness = accum_samples$richness)
+    
+    # Permutation's infos to tibble   
+    accum_samples_perm_df <- 
+      accum_samples$perm %>% 
+      reshape2::melt() %>% 
+      as_tibble() %>% 
+      rename(Var1 = "Sample", 
+             Var2 = "Permutation", 
+             value = "Value")
+    ```
+
+-   **Figure 2B. Species accumulation curves.** 241 All samples (green), reservoir at high-level reservoir (blue), reservoir at low-level (red). Vertical bars represent the 95% confidence 242 intervals.
+
+    ```{r}
+    # collector_plot_samples <- 
+      accum_samples_df %>% 
+      ggplot(aes(x = Sample,
+                 y = Richness)) +
+      geom_line(aes(x = Sample,
+                 y = Richness),
+                inherit.aes = FALSE, linewidth = 2, 
+                col = all_colors, alpha = 0.70) +
+      geom_boxplot(data = accum_samples_perm_df,
+                   aes(x = Sample,
+                       y = Value,
+                       group = Sample),
+                   col = all_colors, fill = all_colors, notch = TRUE,
+                   alpha = 0.33, width = 0.5, outlier.shape = NA) +
+      geom_jitter(data = accum_samples_perm_df,
+                   aes(x = Sample,
+                       y = Value),
+                  size = 0.01, width = 0.25, col = all_colors) +
+      scale_x_continuous(breaks = seq(0, max(accum_samples_df$Sample), by = 3)) +
+      scale_y_continuous(breaks = seq(0, max(accum_samples_df$Richness), by = 10)) +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text.x = element_text(size = 14),
+            axis.text.y = element_text(size = 14),
+            strip.text.x = element_text(size = 14,
+                                        face = "bold"),
+            strip.text.y = element_text(angle = 0,
+                                        size = 14,
+                                        face = "bold"),
+            axis.title.x = element_text(size = 16,
+                                        face = "bold"),
+            axis.title.y = element_text(size = 16,
+                                        face = "bold"),
+            legend.position = "right",
+            legend.key.height = unit(3, "cm")) +
+      labs(x = "Samples",
+           y = "Richness")
+
+    # Exporting plot for the paper
+    # ggsave(file = paste0(figs_path,"/", "collector_plot_all",
+    #                      "-", Sys.Date(), ".pdf", collapse = ""),
+    #        plot = collector_plot_all, 
+    #        width = 20, 
+    #        height = 12, 
+    #        units = "cm", 
+    #        dpi = 600)
+
+    ```
+
+-   Species accumulation curves for site
+
+    ```{r}
+    # Calcular para cada local
 
     # SC1
     sc1_taxa_wider_jac <-
@@ -1828,7 +1917,7 @@ library("colorspace")
          "Richness" = c(0, accum_sc2$richness),
          "sd" = c(0, accum_sc2$sd),
          "samples" = "SC2")
-    
+
     # SC3
     sc3_taxa_wider_jac <-
     taxa_sample_wider_jac %>% 
@@ -1882,7 +1971,7 @@ library("colorspace")
     taxa_sample_wider_jac %>% 
       filter(Local == "SC6")
 
-    accum_sc6 <- 
+    accum_sc6_df <- 
       specaccum(sc6_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
             method = "random",
                 permutations = 999)
@@ -1920,52 +2009,6 @@ library("colorspace")
                                                   "SC7")))
     ```
 
--   **Figure 2B. Species accumulation curves.** 241 All samples (green), reservoir at high-level reservoir (blue), reservoir at low-level (red). Vertical bars represent the 95% confidence 242 intervals.
-
-    ```{r}
-    collector_plot_samples <- 
-      accum_sites_df %>%
-      ggplot(aes(x = Sites,
-                 y = Richness,
-                 # color = Level,
-                 # fill = Level 
-                 )) +
-      geom_line(linewidth = 2, alpha = 0.50) +
-      geom_point(size = 1) +
-      geom_errorbar(aes(ymin = Richness - sd, 
-                        ymax = Richness + sd, 
-                        # colour=Level
-                        ), width=.2) +
-      scale_x_continuous(breaks =seq(0,
-                                     max(accum_sites_df$Sites),
-                                     by = 3)) +
-      scale_y_continuous(breaks = seq(0,
-                                    max(accum_sites_df$Richness),
-                                    by = 3)) +
-      theme(panel.grid.major = element_line(color = "grey",
-                                            linewidth = 0.2,
-                                            linetype = 1),
-            axis.text = element_text(color = "black", 
-                                     size = 17),
-            axis.title = element_text(color = "black", 
-                                      size = 20, 
-                                      face = "bold"),
-            strip.background = element_rect(fill = "#e4e4e4"),
-            legend.position = "none") +
-      labs(x = "Número de amostras", 
-           y = "Riqueza")
-
-    # Exporting plot for the paper
-    ggsave(file = paste0(figs_path,"/", "collector_plot_all",
-                         "-", Sys.Date(), ".pdf", collapse = ""),
-           plot = collector_plot_all, 
-           width = 20, 
-           height = 12, 
-           units = "cm", 
-           dpi = 600)
-
-    collector_plot_samples
-    ```
 
 -   **Figure 2B. Species accumulation curves.** 241 All samples (green), reservoir at high-level reservoir (blue), reservoir at low-level (red). Vertical bars represent the 95% confidence 242 intervals.
 
@@ -2023,13 +2066,13 @@ library("colorspace")
            y = "Riqueza")
 
     # Exporting plot for the paper
-    ggsave(file = paste0(figs_path,"/", "collector_plot_all",
-                         "-", Sys.Date(), ".pdf", collapse = ""),
-           plot = collector_plot_all, 
-           width = 20, 
-           height = 12, 
-           units = "cm", 
-           dpi = 600)
+    # ggsave(file = paste0(figs_path,"/", "collector_plot_all",
+    #                      "-", Sys.Date(), ".pdf", collapse = ""),
+    #        plot = collector_plot_all, 
+    #        width = 20, 
+    #        height = 12, 
+    #        units = "cm", 
+    #        dpi = 600)
 
     collector_plot_sites
     ```
