@@ -173,7 +173,7 @@ library(ape)
       AlignSeqs(iterations = 100,
             refinements = 100,
             verbose = TRUE)
-    
+
     # Alinhamento para o Daniel
     writeXStringSet(algn_ASVs_LGC12sDB_trim,
                     filepath = paste0(tree_path, "/eDNA_cipo-algn", "-",
