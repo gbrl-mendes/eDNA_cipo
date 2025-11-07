@@ -17,10 +17,8 @@ editor_options:
 library(Biostrings)
 library(DECIPHER)
 library(ShortRead)
-library(stringr)
 library(tidyverse)
 library(ggtree)
-library(dplyr)
 library(ape)
 ```
 

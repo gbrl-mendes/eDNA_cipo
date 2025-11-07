@@ -245,7 +245,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     tile_plot_pre_diff
     ```
 
-### Pre-curation Metrics
+### Pre-curation metrics
 
 -   Total number of reads, ASVs, Orders, Families, Genera, Species, and Non-species before curation.
 
@@ -589,7 +589,6 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     meta_data <-
       tibble("metadata 1" = c("SC1", "SC2", "SC3", "SC4", "SC5", "SC6", "SC7"),
              "elevation" = c(859, 812, 800, 1006, 784, 989, 752))
-
     ```
 
 ### Read Evolution
@@ -618,7 +617,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
     ```
 
--   QQuantification of reads per sample surviving the pipeline.
+-   Quantification of reads per sample surviving the pipeline.
 
     ```{r}
     raw_resume_sample <-
@@ -731,6 +730,19 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       select(-c(Sample)) %>% 
       unique() %>% 
       print()
+    ```
+
+-   Summary of reads evolution through the pipeline
+
+    ```{r}
+    summary_reads <- tibble(
+      Stage = c("Sequencing", "Raw pipeline", "Pre-filter", "Curated"),
+      Total = c(seq_read_counts$`Total reads`,
+                sum(raw_resume_sample$`Reads totais`),
+                sum(raw_resume_pre_filt_sample$`Reads totais`),
+                sum(curated_resume_sample$`Reads totais`)))
+
+    print(summary_reads)
     ```
 
 ### Removed Data Analysis
