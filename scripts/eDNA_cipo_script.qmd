@@ -593,7 +593,9 @@ Preliminary analysis of raw data without integrative curation of ASVs.
 
 ### Read Evolution
 
--   Quantification of paired-end reads generated per site.
+#### Absolute Read Evolution
+
+-   Absolute number of paired-end reads generated.
 
     ```{r}
     seq_read_counts <- 
@@ -617,6 +619,56 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
     ```
 
+-   Quantification of reads surviving preliminary filtering.
+
+    ```{r}
+    raw_resume_pre_filt <- 
+      pre_results_filt %>% 
+      reframe("Total reads" = sum(`ASV absolute abundance`),
+              "ASVs" = n_distinct(`ASV header`)) %>% 
+      unique() %>% 
+      print()
+    ```
+
+-   Quantification of reads surviving integrative curation.
+
+    ```{r}
+    curated_resume <-
+      curated_results_filt %>% 
+      reframe("Reads totais" = sum(`ASV absolute abundance`),
+              "ASVs" = n_distinct(`ASV header`)) %>% 
+      unique() %>% 
+      print()
+    ```
+
+-   Summary of reads evolution through the pipeline
+
+    ```{r}
+    summary_reads <- tibble(
+      Stage = c("Sequencing", "Raw pipeline", "Pre-filter", "Curated"),
+      Total = c(seq_read_counts$`Total reads`,
+                sum(raw_resume_sample$`Reads totais`),
+                sum(raw_resume_pre_filt_sample$`Reads totais`),
+                sum(curated_resume_sample$`Reads totais`)))
+
+    print(summary_reads)
+    ```
+
+#### Read Evolution per Sample
+
+-   Number of paired-end reads generated per sample.
+
+    ```{r}
+    seq_read_counts <- 
+      read.csv("/home/gabriel/projetos/eDNA_cipo/data/reads_n_seq_counts_eDNA_cipo.csv",
+               sep = ",",
+               check.names = FALSE) %>%
+      as_tibble() %>% 
+      group_by(Sample) %>% 
+      reframe("Total reads" = sum(`Raw reads (pairs)`)) %>% 
+      print()
+    ```
+
 -   Quantification of reads per sample surviving the pipeline.
 
     ```{r}
@@ -632,10 +684,10 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       mutate("Reads totais" = sum(`ASV absolute abundance`)) %>%
       group_by(Sample) %>%
       reframe("Local" = `Metadata 1`,
-              "Amostra" = Sample,
+              Sample,
               `Reads totais`,
-              `%`,
-              "ASVs" = n_distinct(`ASV header`),
+              # `%`,
+              # "ASVs" = n_distinct(`ASV header`),
               # "OTUs" = n_distinct(OTU),
               # "Class" = `Class (NCBI)`,
               # "Order" = `Order (NCBI)`,
@@ -643,20 +695,8 @@ Preliminary analysis of raw data without integrative curation of ASVs.
               # "Genus" = `Genus (NCBI)`,
               # "Final ID (BLASTn)" = `Final ID (BLASTn)`
               ) %>%
-      select(-c(Sample)) %>% 
       unique() %>% 
       print(n = 23)
-    ```
-
--   Quantification of reads surviving preliminary filtering.
-
-    ```{r}
-    raw_resume_pre_filt <- 
-      pre_results_filt %>% 
-      reframe("Total reads" = sum(`ASV absolute abundance`),
-              "ASVs" = n_distinct(`ASV header`)) %>% 
-      unique() %>% 
-      print()
     ```
 
 -   Quantification of reads per sample surviving preliminary filtering.
@@ -674,10 +714,10 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       mutate("Reads totais" = sum(`ASV absolute abundance`)) %>%
       group_by(Sample) %>%
       reframe("Local" = `Metadata 1`,
-              "Amostra" = Sample,
+              Sample,
               `Reads totais`,
-              `%`,
-              "ASVs" = n_distinct(`ASV header`),
+              # `%`,
+              # "ASVs" = n_distinct(`ASV header`),
               # "OTUs" = n_distinct(OTU),
               # "Class" = `Class (NCBI)`,
               # "Order" = `Order (NCBI)`,
@@ -685,18 +725,6 @@ Preliminary analysis of raw data without integrative curation of ASVs.
               # "Genus" = `Genus (NCBI)`,
               # "Final ID (BLASTn)" = `Final ID (BLASTn)`
               ) %>%
-      select(-c(Sample)) %>% 
-      unique() %>% 
-      print()
-    ```
-
--   Quantification of reads surviving integrative curation.
-
-    ```{r}
-    curated_resume <-
-      curated_results_filt %>% 
-      reframe("Reads totais" = sum(`ASV absolute abundance`),
-              "ASVs" = n_distinct(`ASV header`)) %>% 
       unique() %>% 
       print()
     ```
@@ -716,10 +744,10 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       mutate("Reads totais" = sum(`ASV absolute abundance`)) %>%
       group_by(Sample) %>%
       reframe("Local" = `Metadata 1`,
-              "Amostra" = Sample,
+              Sample,
               `Reads totais`,
-              `%`,
-              "ASVs" = n_distinct(`ASV header`),
+              # `%`,
+              # "ASVs" = n_distinct(`ASV header`),
               # "OTUs" = n_distinct(OTU),
               # "Class" = `Class (NCBI)`,
               # "Order" = `Order (NCBI)`,
@@ -727,22 +755,27 @@ Preliminary analysis of raw data without integrative curation of ASVs.
               # "Genus" = `Genus (NCBI)`,
               # "Final ID (BLASTn)" = `Final ID (BLASTn)`
               ) %>%
-      select(-c(Sample)) %>% 
       unique() %>% 
       print()
     ```
 
--   Summary of reads evolution through the pipeline
+-   Summary of reads evolution per sample through the pipeline
 
     ```{r}
-    summary_reads <- tibble(
-      Stage = c("Sequencing", "Raw pipeline", "Pre-filter", "Curated"),
-      Total = c(seq_read_counts$`Total reads`,
-                sum(raw_resume_sample$`Reads totais`),
-                sum(raw_resume_pre_filt_sample$`Reads totais`),
-                sum(curated_resume_sample$`Reads totais`)))
-
-    print(summary_reads)
+    summary_reads_sample <-
+      seq_read_counts %>%
+      rename(`Total reads` = "Raw_Reads") %>%
+      left_join(raw_resume_sample %>%
+                  rename_with(~paste0("After_Pipeline_", .), -c(Local, Sample)),
+                by = "Sample") %>%
+      left_join(raw_resume_pre_filt_sample %>%
+                  rename_with(~paste0("After_Pre_Filter_", .), -c(Local, Sample)),
+                by = "Sample") %>%
+      left_join(curated_resume_sample %>%
+                  rename_with(~paste0("After_Curation_", .), -c(Local, Sample)),
+                by = "Sample") %>%
+      select(-c(Local.x, Local.y, Local)) %>%
+      print()
     ```
 
 ### Removed Data Analysis
