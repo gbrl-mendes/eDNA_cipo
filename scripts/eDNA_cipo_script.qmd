@@ -332,7 +332,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
 -   Species list in *wider* format.
 
     ```{r}
-    # Wider format list (grouped by location)
+    # Wider format list (grouped by site)
     pre_taxa_filt_wider <-
       pre_results_filt %>%
       select(Sample, 
@@ -533,7 +533,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
              `Metadata 7` == "ok") # apenas a nivel de genero e especie 
     ```
 
-### Improviments
+### Improvements
 
 -   Remove unused columns.
 
@@ -1325,7 +1325,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
 
     ```{r}
     # Wider list grouped by sample
-    taxa_sample_wider <- 
+    sample_taxa_wider <- 
     curated_results %>%
       select(Sample, 
              `ASV absolute abundance`,
@@ -1353,7 +1353,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
 
     # Wider list grouped by site
-    taxa_site_wider <- 
+    site_taxa_wider <- 
     curated_results %>%
       select(`ASV absolute abundance`,
              `Metadata 1`,
@@ -1379,6 +1379,51 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
     ```
 
+-   Summary species list grouped by site in *wider* format.
+
+```{r}
+    # Wider format list (grouped by site)
+    taxa_site_wider <-
+      curated_results %>%
+      select(Sample, 
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             `Final ID (BLASTn)`,
+             ends_with("(Curated ID)"), 
+             `ASV header`) %>% 
+      group_by(`Metadata 1`) %>% 
+      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, `Metadata 1`) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
+      reframe("Local" = `Metadata 1`,
+              "Taxon (Curated ID)" = `Curated ID`,
+              "Abundância" = Reads,
+              `%`) %>% 
+      unique() %>% 
+      pivot_wider(id_cols = `Taxon (Curated ID)`,
+                 names_from = Local,
+                 values_from = `%`)
+
+    # Orders for each taxon detected previously
+    ordens_f <- 
+      curated_results %>% 
+      reframe("Taxon (Curated ID)" = `Curated ID`,
+              "Ordem" = `Order (Curated ID)`) %>% 
+      unique()
+
+    # Complete species list in wider format with corresponding orders
+    order_taxa_site_wider <- 
+      taxa_site_wider %>% 
+      left_join(ordens_f,
+                by = "Taxon (Curated ID)") %>% 
+      relocate(Ordem,
+               `Taxon (Curated ID)`) %>% 
+      print()
+```
+
 -   Taxa detected after integrative curation showing read abundance, ASVs, and OTUs.
 
     ```{r}
@@ -1393,7 +1438,8 @@ Preliminary analysis of raw data without integrative curation of ASVs.
               "ASVs" = n_distinct(`ASV header`),
               "OTUs" = n_distinct(OTU)) %>%
       unique() %>% 
-      select(-c(`Curated ID`))
+      select(-c(`Curated ID`)) %>% 
+      print()
 
     # Export table
     # write.csv(taxa_summ, paste0(tbl_path, "/taxa_summ_tbl", "-",
