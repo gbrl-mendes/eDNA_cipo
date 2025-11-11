@@ -1276,20 +1276,20 @@ Preliminary analysis of raw data without integrative curation of ASVs.
              `ASV header`, 
              `Sequence (ASV tip)`) %>% 
       group_by(Sample) %>% 
-      mutate("Abundancia da amostra" = sum(`ASV absolute abundance`)) %>%
+      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
       group_by(`Curated ID`, Sample) %>% 
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
       mutate() %>% 
-      reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Curated ID)`,
-              "Genero" = `Genus (Curated ID)`,
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
               "Taxon" = `Curated ID`,
-              "Local" = `Metadata 1`,
-              "Amostra" = Sample,
-              `Abundancia da amostra`,
+              "Site" = `Metadata 1`,
+              Sample,
+              `Sample abundance`,
               Reads,
-              "%" = round(Reads / `Abundancia da amostra` * 100, 4)) %>%
+              "%" = round(Reads / `Sample abundance` * 100, 4)) %>%
       unique() %>%
       print()
 
@@ -1304,19 +1304,19 @@ Preliminary analysis of raw data without integrative curation of ASVs.
              `ASV header`, 
              `Sequence (ASV tip)`) %>% 
       group_by(`Metadata 1`) %>% 
-      mutate("Abundancia do local" = sum(`ASV absolute abundance`)) %>%
+      mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
       group_by(`Curated ID`, `Metadata 1`) %>% 
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
       mutate() %>% 
-      reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Curated ID)`,
-              "Genero" = `Genus (Curated ID)`,
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
               "Taxon" = `Curated ID`,
-              "Local" = `Metadata 1`,
-              `Abundancia do local`,
+              "Site" = `Metadata 1`,
+              `Site abundance`,
               Reads,
-              "%" = round(Reads / `Abundancia do local` * 100, 2)) %>%
+              "%" = round(Reads / `Site abundance` * 100, 2)) %>%
       unique() %>%
       print()
     ```
@@ -2027,7 +2027,7 @@ This section assesses how species richness increases with sampling effort, both 
     taxa_sample_wider_jac %>% 
       filter(Local == "SC6")
 
-    accum_sc6_df <- 
+    accum_sc6 <- 
       specaccum(sc6_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
             method = "random",
                 permutations = 999)
@@ -2106,3 +2106,57 @@ This section assesses how species richness increases with sampling effort, both 
 
     collector_plot_sites
     ```
+
+### Diversity metrics
+
+#### Alpha-Diversity
+
+-   **Data preparation**
+
+    ```{r}
+    alpha_site_tbl <-
+      taxa_sample_longer %>%
+      group_by(Sample) %>%  
+      reframe(Site = Site,
+              Observado = specnumber(`%`),
+              Shannon = diversity(`%`, index = "shannon"),
+              Simpson = diversity(`%`, index = "simpson"),
+              Invsimpson = 1/Simpson,
+              n = sum(`%`)) %>%  
+      pivot_longer(cols = c(Observado, 
+                            Shannon, 
+                            Invsimpson, 
+                            Simpson),
+                   names_to = "index") 
+    ```
+
+-   **Boxplot Alpha-Diversity**
+
+    ```{r}
+    alpha_site_tbl %>%
+      filter(index %in% c("Observado",
+                          "Simpson")) %>% 
+      ggplot(aes(x = Site,
+                 y = value,
+                 fill = Site)) +
+      geom_boxplot(alpha = 0.7) +
+      # geom_point(aes(fill = Sample)) +
+      facet_wrap(~index, nrow = 1, scales = "free_y") +
+      scale_fill_manual(values = site_colors) +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text.x = element_text(size = 14),
+            axis.text.y = element_text(size = 14),
+            strip.text = element_text(size = 14,
+                                      face = "bold"),
+            legend.position = "none",
+            legend.key.height = unit(3, "cm"),
+            axis.title.x = element_text(size = 16,
+                                        face = "bold"),
+            axis.title.y = element_text(size = 16,
+                                        face = "bold")) +
+      labs(x = "Local",
+           y = "Valor")
+    ```
+
