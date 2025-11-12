@@ -1481,7 +1481,69 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     taxa_summ
     ```
 
-#### Tile plots
+## Ecological analysis
+
+### Housekeeping
+
+This first section provides core analytical functions and sets color palettes for downstream analyses.
+
+-   Custom function to sum unique values, necessary for data pivoting.
+
+    ```{r}
+    # Function to handle character and numeric vectors when pivoting
+    sum_uniq <- function(vec) {
+      if (is.character(vec)) {
+        suniq <- BiocGenerics::unique(vec)
+      }
+      if (is.numeric(vec)) {
+        suniq <- sum(vec)
+      }
+      return(suniq)
+    }
+    ```
+
+-   Assign colors for each reservoir site and for all sites.
+
+    ```{r}
+    # Color palettes for each site 
+    site_colors <- c("SC1" = "#67322EFF", "SC2" = "#9C593EFF", "SC3" = "#DDA569FF", "SC4" = "#3F4330FF",
+                     "SC5" = "#2C6B67FF", "SC6" = "#2A4866FF", "SC7" = "#6592B0FF")
+
+    # Color palette for overall sample
+    all_colors <- c("#175449FF")
+    ```
+
+-   Create palletes
+
+    ```{r}
+    colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF","#2C6B67FF","#2A4866FF","#6592B0FF"))
+    
+    palette_function <- colorRampPalette(colors_base)
+    
+    palette_full <- palette_function(200)
+    
+    # 50 colors
+    index_colors_50 <- seq(1, 200, length.out = 50)
+    
+    palette_50 <- palette_full[index_colors_50]
+    
+    # 20 colors
+    index_colors_20 <- seq(1, 200, length.out = 20)
+    
+    palette_20 <- palette_full[index_colors_20]
+    
+    # 20 colors
+    index_colors_20 <- seq(1, 200, length.out = 20)
+    
+    palette_20 <- palette_full[index_colors_20]
+    
+    # 5 colors
+    index_colors_5 <- seq(1, 200, length.out = 5)
+    
+    palette_5 <- palette_full[index_colors_5]
+    ```
+
+### Tile plots
 
 -   Tile plot for species analysis per sample
 
@@ -1629,260 +1691,24 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     tile_plot_site
     ```
 
-## Ecological analysis
 
-### Housekeeping
 
-This first section provides core analytical functions and sets color palettes for downstream analyses.
 
--   Custom function to sum unique values, necessary for data pivoting.
+### Bar plots
 
-    ```{r}
-    # Function to handle character and numeric vectors when pivoting
-    sum_uniq <- function(vec) {
-      if (is.character(vec)) {
-        suniq <- BiocGenerics::unique(vec)
-      }
-      if (is.numeric(vec)) {
-        suniq <- sum(vec)
-      }
-      return(suniq)
-    }
-    ```
-
--   Assign colors for each reservoir site and for all sites.
-
-    ```{r}
-    # Color palettes for each site 
-    site_colors <- c("SC1" = "#67322EFF",
-                     "SC2" = "#9C593EFF",
-                     "SC3" = "#DDA569FF",
-                     "SC4" = "#3F4330FF",
-                     "SC5" = "#2C6B67FF",
-                     "SC6" = "#2A4866FF",
-                     "SC7" = "#6592B0FF")
-
-    # Color palette for overall sample
-    all_colors <- c("#175449FF")
-    ```
-
-### Principal Coordinates Analysis (PCoA)
-
-Procedures for preparing data, performing ordination, and visualizing fish community composition.
-
--   **Data preparation for ordination.** Create a wide-format table (**`Samples x Taxa`**) with RRA values for vegan ordination.
-
-    ```{r}
-    # Convert the long table to a wide format (Samples x IDs)
-    taxa_sample_wider_PCoA <- 
-      taxa_sample_longer %>%
-      select(c(Local, 
-               Amostra,
-               Taxon,
-               `%`)) %>%
-      pivot_wider(id_cols = c(Local,
-                              Amostra),
-                  names_from = Taxon,
-                  values_from = `%`,
-                  values_fn = sum_uniq,
-                  names_sort = TRUE,
-                  names_prefix = "ID_") %>%
-      relocate(c(Local,
-                 Amostra,
-                 starts_with("ID_"))) %>%
-      mutate(across(starts_with("ID_"), 
-                    \(x) replace_na(x, 0))) %>%
-      mutate("Local" = as.factor(Local)) %>%
-      mutate("Amostra" = as.factor(Amostra))
-        
-    # Prepare data for vegan and fix rownames
-    taxa_sample_wider_PCoA <- taxa_sample_wider_PCoA %>%
-      mutate("Sample number" = row_number()) %>%
-      relocate("Sample number") %>%
-      as.data.frame()
-        
-    row.names(taxa_sample_wider_PCoA) <- 
-      taxa_sample_wider_PCoA$`Sample number`
-        
-    # Clean species names to avoid plotting issues
-    colnames(taxa_sample_wider_PCoA)[4:ncol(taxa_sample_wider_PCoA)] <- 
-      colnames(taxa_sample_wider_PCoA)[4:ncol(taxa_sample_wider_PCoA)] %>%
-      str_replace_all(pattern = " ", replacement = "_") %>%
-      str_replace_all(pattern = "\\.", replacement = "") %>%
-      str_replace_all(pattern = "\\(", replacement = "") %>%
-      str_replace_all(pattern = "\\)", replacement = "")
-    ```
-
--   **Ordination, vector fitting, and result extraction.** Analyze community composition differences using PCoA on a Jaccard distance matrix.
-
-    ```{r}
-    # Filter data and create distance matrix
-    taxa_sample_wider_PCoA <- taxa_sample_wider_PCoA %>% 
-      select(where(~ any(. != 0)))
-
-    pcOa_dist <- vegan::vegdist(x = taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)],
-                                method = "jaccard",
-                                binary = TRUE)
-
-    # Run PCoA
-    pcOa <- cmdscale(pcOa_dist, 
-                     eig = TRUE)
-
-    ordiplot(pcOa, 
-             display = 'sites', 
-             type = 'text')
-        
-    # Fit species vectors to the ordination
-    meta.spp.fit <- envfit(pcOa, 
-                           taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)], 
-                           permutations = 999)
-        
-    # Extract scores for significant species
-    sps_pvals <- 
-      tibble("IDs" = names(meta.spp.fit$vectors$pvals),
-             "p-value" = meta.spp.fit$vectors$pvals)
-                            
-    spp.scrs <- 
-      as.data.frame(scores(meta.spp.fit, 
-                           display = "vectors")) %>%
-      mutate("IDs" = rownames(.)) %>%
-      left_join(y = sps_pvals, 
-                by = "IDs")
-          
-    spp.scrs$IDs <- 
-      gsub("ID_", "",
-           spp.scrs$IDs)
-
-    spp.scrs$IDs <- gsub("_", " ",
-                         spp.scrs$IDs)
-          
-    sig.spp.scrs <- 
-      spp.scrs %>% 
-      filter(`p-value` <= 0.05)
-        
-    # Extract site scores and centroids
-    site.scrs <- 
-      as.data.frame(scores(pcOa,
-                           display = "sites"))
-
-    colnames(site.scrs) <- c("PCoA1",
-                             "PCoA2")
-
-    site.scrs <- 
-      site.scrs %>%
-      mutate("Sample number" = as.double(row.names(.))) %>%
-      left_join(y = taxa_sample_wider_PCoA[, c("Sample number",
-                                               "Local",
-                                               "Amostra")],
-                by = "Sample number")
-        
-    cent <- aggregate(cbind(PCoA1, PCoA2) ~ Local, 
-                      data = site.scrs, 
-                      FUN = "mean")
-        
-    # Calculate ellipses for plotting
-    ord <- ordiellipse(ord = pcOa,
-                       groups = taxa_sample_wider_PCoA$Local,
-                       display = "sites",
-                       kind = "ehull", 
-                       conf = 0.95, 
-                       label = TRUE)
-
-    df_ell <- data.frame() 
-
-    for(g in levels(as.factor(taxa_sample_wider_PCoA$Local))){
-      df_ell <- rbind(df_ell,cbind(as.data.frame(with(site.scrs[site.scrs$Local==g,],vegan:::veganCovEllipse(
-        ord[[g]]$cov,ord[[g]]$center,ord[[g]]$scale))),Local=g))
-        }
-    ```
-
--   **Ordination plot**. PCoA b-diversity composition between sites.
-
-    ```{r}
-    percent_pcOa <- pcOa$eig / sum(pcOa$eig) * 100
-        
-    cores <- c("High" = "#3381b1", 
-               "Low" = "#E63946")
-        
-    # PCoA_site <- 
-      ggplot(data = site.scrs, 
-             aes(x = PCoA1, y 
-                 = PCoA2)) +
-    # # Ellipses
-    #   ggforce::geom_mark_ellipse(data = df_ell,
-    #                              aes(x = Dim1, 
-    #                                  y = Dim2, group = Local,
-    #                                  label = Local, 
-    #                                  col = Local, fill = Local),
-    #                                  inherit.aes = FALSE,
-    #                              alpha=0.10, linetype=2, 
-    #                              expand = 0, label.fontsize = 20,
-    #                              con.cap = 0.1) +
-    # Sample points
-      geom_point(aes(fill = Amostra, 
-                     col = Amostra, 
-                     group = Local, 
-                     shape = Local), 
-                 stroke = 0.5, 
-                 alpha = 0.75, 
-                 size = 3) +
-    # Sample labels
-      ggrepel::geom_text_repel(aes(label = Amostra), 
-                               size=6, direction = "both",
-                               segment.size = 0.25,
-                               segment.alpha=0.1, force = 3,
-                               max.overlaps = 100, 
-                               fontface = "bold") +
-      # Species vectors
-      geom_segment(data = sig.spp.scrs, 
-                   aes(x = 0, xend = Dim1, 
-                       y = 0, yend = Dim2),
-                   arrow = arrow(length = unit(0.1, "cm")),
-                   colour = "grey30", alpha = 0.5, lwd = 0.3) +
-      # Species labels
-      geom_text_repel(data = sig.spp.scrs, 
-                      aes(x=Dim1, y=Dim2, label = IDs),
-                      size = 3.5, alpha = 0.75, 
-                      segment.size = 0.25, 
-                      segment.alpha = 0.1, 
-                      max.overlaps = 25) +
-      # Centroids
-      geom_point(data = cent, 
-                 aes(x = PCoA1, 
-                     y = PCoA2, 
-                     fill = Local),
-                 size = 8, 
-                 colour = "#222222",
-                 alpha = 0.75, 
-                 shape  = 13) +
-      coord_fixed(expand = c(0.5)) +
-      theme(panel.grid.major = element_line(color = "grey", 
-                                            size = 0.2, 
-                                            linetype = 1),
-            axis.text = element_text(size = 17, 
-                                     color = "black"),
-            axis.title = element_text(size = 20, 
-                                      face = "bold"),
-            legend.position = "none") +
-      labs(x = paste0("PCoA1 (", 
-                      round(percent_pcOa, 2), "%)")[1],
-           y = paste0("PCoA2 (", 
-                  round(percent_pcOa, 2), "%)")[2]) 
-    # +
-      # scale_fill_manual(values = cores) +
-      # scale_colour_manual(values = cores)
-
-    # Exporting plot for the paper
-    ggsave(plot = PCoA_MCE_2, 
-           filename = paste0(figs_path, "/PCoA_all", "-",
-                             Sys.Date(), ".pdf", sep = ""),
-           units = "cm", 
-           height = 16.75, 
-           width = 16.75, 
-           dpi = 600)
-
-    PCoA_MCE_2
-    ```
+```{r}
+taxa_sample_longer %>% 
+  ggplot(aes(x = Sample,
+             y = `%`,
+             fill = Order,
+             width = 1)) +
+  geom_bar(stat = "identity", 
+           position = "stack") +
+   scale_fill_manual(values = palette_5)
+  # +
+  # facet_grid(cols = vars(Site),
+  #            scales = "free_x")
+```
 
 ### Species accumulation curves
 
@@ -2140,9 +1966,7 @@ This section assesses how species richness increases with sampling effort, both 
     collector_plot_sites
     ```
 
-### Diversity metrics
-
-#### Alpha-Diversity
+### Alpha-Diversity
 
 -   **Data preparation**
 
@@ -2193,3 +2017,220 @@ This section assesses how species richness increases with sampling effort, both 
            y = "Valor")
     ```
 
+### Principal Coordinates Analysis (PCoA)
+
+Procedures for preparing data, performing ordination, and visualizing fish community composition.
+
+-   **Data preparation for ordination.** Create a wide-format table (**`Samples x Taxa`**) with RRA values for vegan ordination.
+
+    ```{r}
+    # Convert the long table to a wide format (Samples x IDs)
+    taxa_sample_wider_PCoA <- 
+      taxa_sample_longer %>%
+      select(c(Local, 
+               Amostra,
+               Taxon,
+               `%`)) %>%
+      pivot_wider(id_cols = c(Local,
+                              Amostra),
+                  names_from = Taxon,
+                  values_from = `%`,
+                  values_fn = sum_uniq,
+                  names_sort = TRUE,
+                  names_prefix = "ID_") %>%
+      relocate(c(Local,
+                 Amostra,
+                 starts_with("ID_"))) %>%
+      mutate(across(starts_with("ID_"), 
+                    \(x) replace_na(x, 0))) %>%
+      mutate("Local" = as.factor(Local)) %>%
+      mutate("Amostra" = as.factor(Amostra))
+        
+    # Prepare data for vegan and fix rownames
+    taxa_sample_wider_PCoA <- taxa_sample_wider_PCoA %>%
+      mutate("Sample number" = row_number()) %>%
+      relocate("Sample number") %>%
+      as.data.frame()
+        
+    row.names(taxa_sample_wider_PCoA) <- 
+      taxa_sample_wider_PCoA$`Sample number`
+        
+    # Clean species names to avoid plotting issues
+    colnames(taxa_sample_wider_PCoA)[4:ncol(taxa_sample_wider_PCoA)] <- 
+      colnames(taxa_sample_wider_PCoA)[4:ncol(taxa_sample_wider_PCoA)] %>%
+      str_replace_all(pattern = " ", replacement = "_") %>%
+      str_replace_all(pattern = "\\.", replacement = "") %>%
+      str_replace_all(pattern = "\\(", replacement = "") %>%
+      str_replace_all(pattern = "\\)", replacement = "")
+    ```
+
+-   **Ordination, vector fitting, and result extraction.** Analyze community composition differences using PCoA on a Jaccard distance matrix.
+
+    ```{r}
+    # Filter data and create distance matrix
+    taxa_sample_wider_PCoA <- taxa_sample_wider_PCoA %>% 
+      select(where(~ any(. != 0)))
+
+    pcOa_dist <- vegan::vegdist(x = taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)],
+                                method = "jaccard",
+                                binary = TRUE)
+
+    # Run PCoA
+    pcOa <- cmdscale(pcOa_dist, 
+                     eig = TRUE)
+
+    ordiplot(pcOa, 
+             display = 'sites', 
+             type = 'text')
+        
+    # Fit species vectors to the ordination
+    meta.spp.fit <- envfit(pcOa, 
+                           taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)], 
+                           permutations = 999)
+        
+    # Extract scores for significant species
+    sps_pvals <- 
+      tibble("IDs" = names(meta.spp.fit$vectors$pvals),
+             "p-value" = meta.spp.fit$vectors$pvals)
+                            
+    spp.scrs <- 
+      as.data.frame(scores(meta.spp.fit, 
+                           display = "vectors")) %>%
+      mutate("IDs" = rownames(.)) %>%
+      left_join(y = sps_pvals, 
+                by = "IDs")
+          
+    spp.scrs$IDs <- 
+      gsub("ID_", "",
+           spp.scrs$IDs)
+
+    spp.scrs$IDs <- gsub("_", " ",
+                         spp.scrs$IDs)
+          
+    sig.spp.scrs <- 
+      spp.scrs %>% 
+      filter(`p-value` <= 0.05)
+        
+    # Extract site scores and centroids
+    site.scrs <- 
+      as.data.frame(scores(pcOa,
+                           display = "sites"))
+
+    colnames(site.scrs) <- c("PCoA1",
+                             "PCoA2")
+
+    site.scrs <- 
+      site.scrs %>%
+      mutate("Sample number" = as.double(row.names(.))) %>%
+      left_join(y = taxa_sample_wider_PCoA[, c("Sample number",
+                                               "Local",
+                                               "Amostra")],
+                by = "Sample number")
+        
+    cent <- aggregate(cbind(PCoA1, PCoA2) ~ Local, 
+                      data = site.scrs, 
+                      FUN = "mean")
+        
+    # Calculate ellipses for plotting
+    ord <- ordiellipse(ord = pcOa,
+                       groups = taxa_sample_wider_PCoA$Local,
+                       display = "sites",
+                       kind = "ehull", 
+                       conf = 0.95, 
+                       label = TRUE)
+
+    df_ell <- data.frame() 
+
+    for(g in levels(as.factor(taxa_sample_wider_PCoA$Local))){
+      df_ell <- rbind(df_ell,cbind(as.data.frame(with(site.scrs[site.scrs$Local==g,],vegan:::veganCovEllipse(
+        ord[[g]]$cov,ord[[g]]$center,ord[[g]]$scale))),Local=g))
+        }
+    ```
+
+-   **Ordination plot**. PCoA Beta-Diversity composition between sites.
+
+    ```{r}
+    percent_pcOa <- pcOa$eig / sum(pcOa$eig) * 100
+        
+    cores <- c("High" = "#3381b1", 
+               "Low" = "#E63946")
+        
+    # PCoA_site <- 
+      ggplot(data = site.scrs, 
+             aes(x = PCoA1, y 
+                 = PCoA2)) +
+    # # Ellipses
+    #   ggforce::geom_mark_ellipse(data = df_ell,
+    #                              aes(x = Dim1, 
+    #                                  y = Dim2, group = Local,
+    #                                  label = Local, 
+    #                                  col = Local, fill = Local),
+    #                                  inherit.aes = FALSE,
+    #                              alpha=0.10, linetype=2, 
+    #                              expand = 0, label.fontsize = 20,
+    #                              con.cap = 0.1) +
+    # Sample points
+      geom_point(aes(fill = Amostra, 
+                     col = Amostra, 
+                     group = Local, 
+                     shape = Local), 
+                 stroke = 0.5, 
+                 alpha = 0.75, 
+                 size = 3) +
+    # Sample labels
+      ggrepel::geom_text_repel(aes(label = Amostra), 
+                               size=6, direction = "both",
+                               segment.size = 0.25,
+                               segment.alpha=0.1, force = 3,
+                               max.overlaps = 100, 
+                               fontface = "bold") +
+      # Species vectors
+      geom_segment(data = sig.spp.scrs, 
+                   aes(x = 0, xend = Dim1, 
+                       y = 0, yend = Dim2),
+                   arrow = arrow(length = unit(0.1, "cm")),
+                   colour = "grey30", alpha = 0.5, lwd = 0.3) +
+      # Species labels
+      geom_text_repel(data = sig.spp.scrs, 
+                      aes(x=Dim1, y=Dim2, label = IDs),
+                      size = 3.5, alpha = 0.75, 
+                      segment.size = 0.25, 
+                      segment.alpha = 0.1, 
+                      max.overlaps = 25) +
+      # Centroids
+      geom_point(data = cent, 
+                 aes(x = PCoA1, 
+                     y = PCoA2, 
+                     fill = Local),
+                 size = 8, 
+                 colour = "#222222",
+                 alpha = 0.75, 
+                 shape  = 13) +
+      coord_fixed(expand = c(0.5)) +
+      theme(panel.grid.major = element_line(color = "grey", 
+                                            size = 0.2, 
+                                            linetype = 1),
+            axis.text = element_text(size = 17, 
+                                     color = "black"),
+            axis.title = element_text(size = 20, 
+                                      face = "bold"),
+            legend.position = "none") +
+      labs(x = paste0("PCoA1 (", 
+                      round(percent_pcOa, 2), "%)")[1],
+           y = paste0("PCoA2 (", 
+                  round(percent_pcOa, 2), "%)")[2]) 
+    # +
+      # scale_fill_manual(values = cores) +
+      # scale_colour_manual(values = cores)
+
+    # Exporting plot for the paper
+    ggsave(plot = PCoA_MCE_2, 
+           filename = paste0(figs_path, "/PCoA_all", "-",
+                             Sys.Date(), ".pdf", sep = ""),
+           units = "cm", 
+           height = 16.75, 
+           width = 16.75, 
+           dpi = 600)
+
+    PCoA_MCE_2
+    ```
