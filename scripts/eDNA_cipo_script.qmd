@@ -1517,29 +1517,29 @@ This first section provides core analytical functions and sets color palettes fo
 
     ```{r}
     colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF","#2C6B67FF","#2A4866FF","#6592B0FF"))
-    
+
     palette_function <- colorRampPalette(colors_base)
-    
+
     palette_full <- palette_function(200)
-    
+
     # 50 colors
     index_colors_50 <- seq(1, 200, length.out = 50)
-    
+
     palette_50 <- palette_full[index_colors_50]
-    
+
     # 20 colors
     index_colors_20 <- seq(1, 200, length.out = 20)
-    
+
     palette_20 <- palette_full[index_colors_20]
-    
+
     # 20 colors
     index_colors_20 <- seq(1, 200, length.out = 20)
-    
+
     palette_20 <- palette_full[index_colors_20]
-    
+
     # 5 colors
     index_colors_5 <- seq(1, 200, length.out = 5)
-    
+
     palette_5 <- palette_full[index_colors_5]
     ```
 
@@ -1690,9 +1690,6 @@ This first section provides core analytical functions and sets color palettes fo
 
     tile_plot_site
     ```
-
-
-
 
 ### Bar plots
 
