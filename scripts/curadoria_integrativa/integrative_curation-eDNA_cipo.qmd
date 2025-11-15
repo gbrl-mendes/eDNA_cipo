@@ -138,7 +138,7 @@ library(ape)
     BrowseSeqs(algn_ASVs_LGC12sDB)
     ```
 
--   Filtrando grupos externos do LGC12sDB
+-   Filtrando grupos externos do LGC12Sdb
 
     ```{r}
     fish_DB_fil <- seqs_fish_DB[!(names(seqs_fish_DB) %>% 
