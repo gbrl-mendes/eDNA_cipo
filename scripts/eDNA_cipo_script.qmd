@@ -452,14 +452,25 @@ Preliminary analysis of raw data without integrative curation of ASVs.
 
 ### Data retrieval
 
--   Data with curated identifications (Curated IDs) after literature verification and expert analysis.
+-   eDNA metabarcoding data with curated identifications (Curated IDs) after literature verification and expert analysis.
 
     ```{r}
     raw_curated_results <-
-      read.csv("/home/gabriel/projetos/eDNA_cipo/data/resultados_completos-eDNA_Cipo-301025.csv",
+      read.csv(paste0(data_path, "/resultados_completos-eDNA_Cipo-301025.csv"),
                sep = ",",
                check.names = FALSE) %>%
        mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>% 
+      as_tibble()
+    ```
+
+-   Traditional methods capture data.
+
+    ```{r}
+    traditional_results <-  
+      read.csv(paste0(data_path, "/coleta_tradicional-eDNA_cipo-151125.csv"),
+               sep = ",", 
+               check.names = FALSE) %>%
+      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>% 
       as_tibble()
     ```
 
