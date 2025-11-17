@@ -448,7 +448,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     tile_plot_pre
     ```
 
-## Curated Data Analysis
+## eDNA Curated Data Analysis
 
 ### Data retrieval
 
@@ -1492,6 +1492,94 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     taxa_summ
     ```
 
+## Traditional Methods Data
+
+### Data retrieval
+
+-   Traditional methods capture data retrieval.
+
+    ```{r}
+    traditional_results <-  
+      read.csv(paste0(data_path, "/coleta_tradicional-eDNA_cipo-171125.csv"),
+               sep = ",", 
+               check.names = FALSE) %>%
+      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>% 
+      as_tibble()
+    ```
+
+### Improvements
+
+-   Taxonomy retrieval
+
+    ```{r}
+    # Retrieve curated genera
+    traditional_results <-
+      traditional_results %>% 
+      mutate("Genus" = word(Taxon, 1)) %>% 
+      relocate(Taxon, Genus)
+
+    # Load TaxId retrieval function
+    source("/home/gabriel/functions/retrieve_taxid.R") 
+
+    # Retrieving TaxIDs
+    taxids <- retrieve_taxid(traditional_results$Genus)
+
+    # Load taxonomy retrieval function
+    source("/home/gabriel/functions/retrieve_taxonomy.R") 
+    curated_taxonomy <- retrieve_taxonomy(taxids)
+
+    # # Select only necessary information
+    curated_taxonomy_rdx <- 
+      curated_taxonomy %>% 
+      filter(class == "Actinopteri") %>% 
+      select(order, family, genus) %>% 
+      reframe("Order" = order,
+              "Family" = family,
+              "Genus" = genus) %>% 
+      na.omit()
+
+    # Join curated taxonomy with original data
+    traditional_results <- 
+      traditional_results %>% 
+      left_join(curated_taxonomy_rdx, 
+                by = join_by(Genus)) %>% 
+      relocate(Order, Family, Genus, Taxon)
+    ```
+
+-   Longer Table
+
+    ```{r}
+    traditional_longer <-
+    traditional_results %>% 
+      pivot_longer(cols = c("SC1", "SC2", "SC3", 
+                            "SC4", "SC6", "SC7"),
+                   names_to = "Site",
+                   values_to = "Ocurrence") %>% 
+      filter(!is.na(Ocurrence)) %>% 
+      mutate(Method = "Traditional")
+    ```
+
+- Absence/Presence table
+
+    ```{r}
+    merged_methods_longer_pa <-  
+      merged_methods_longer %>%
+      select(-c(Order, Family, Genus)) %>%
+      mutate(Presence = "Present",
+             Taxon = factor(Taxon,
+                            levels = rev(spp_levels))) %>%
+      # group_by(Site, Family) %>%
+      complete(Taxon,
+               Method,
+               Site,
+               fill = list(Presence = "Absent")) %>%
+      ungroup() %>%
+      left_join(merged_methods_longer %>% 
+                  select(Family, Taxon),
+                by = "Taxon") %>%
+      unique()
+    ```
+
 ## Ecological analysis
 
 ### Housekeeping
@@ -1511,6 +1599,14 @@ This first section provides core analytical functions and sets color palettes fo
       }
       return(suniq)
     }
+    ```
+
+-   Custom function to convert abundances to binary data
+    ```{r}
+    # Binary function (presence/absence)
+    jaccarize <- function(x) {
+      ifelse(x == 0, 0, 1)
+      }
     ```
 
 -   Assign colors for each reservoir site and for all sites.
@@ -1554,7 +1650,20 @@ This first section provides core analytical functions and sets color palettes fo
     palette_5 <- palette_full[index_colors_5]
     ```
 
+=   eDNA and Traditional Data merge
+
+    ```{r}
+    merged_methods_longer <- 
+      taxa_site_longer %>% 
+      select(-c(`Site abundance`, `%`)) %>% 
+      rename(Reads = "Ocurrence") %>% 
+      mutate(Method = "Metabarcoding") %>% 
+      bind_rows(traditional_longer)
+    ```
+
 ### Tile plots
+
+#### eDNA Metabarcoding
 
 -   Tile plot for species analysis per sample
 
@@ -1577,24 +1686,24 @@ This first section provides core analytical functions and sets color palettes fo
                  space = "free",
                  scales = "free",
                  drop = TRUE) +
-      scale_fill_gradientn(name = "%",
-                           colours = rev(c("#30123BFF",
-                                           "#4662D7FF",
-                                           "darkgreen",
-                                           "#72FE5EFF",
-                                           "#C7EF34FF",
-                                           "#FABA39FF",
-                                           "#F66B19FF",
-                                           "#CB2A04FF",
-                                           "#7A0403FF")),
-        values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5,
-                                   5, 10, 25, 50, 75, 100)),
-        breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00,
-                   25.00, 50.00, 100.00),
-        labels = scales::number_format(accuracy = 0.01),
-        limits = c(0.01, 100),
-        na.value = "#7A0403FF",
-        trans = "log10") +
+      scale_fill_gradient(name = "%",
+                          colours = rev(c("#30123BFF",
+                                          "#4662D7FF",
+                                          "darkgreen",
+                                          "#72FE5EFF",
+                                          "#C7EF34FF",
+                                          "#FABA39FF",
+                                          "#F66B19FF",
+                                          "#CB2A04FF",
+                                          "#7A0403FF")),
+                          values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5,
+                                                     5, 10, 25, 50, 75, 100)),
+                          breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00,
+                                     25.00, 50.00, 100.00),
+                          labels = scales::number_format(accuracy = 0.01),
+                          limits = c(0.01, 100),
+                          na.value = "#7A0403FF",
+                          trans = "log10") +
       theme(panel.grid.major = element_line(color = "grey",
                                             linewidth = 0.2,
                                             linetype = 1),
@@ -1702,14 +1811,76 @@ This first section provides core analytical functions and sets color palettes fo
     tile_plot_site
     ```
 
+#### Metabarcoding vs Traditional Methods
+
+-   Species comparation per site
+
+    ```{r}
+    # Define factor Locals for plot
+    spp_levels <- 
+      sort(unique(merged_methods_longer$Taxon))
+
+    # Plot
+    tile_plot_methods <-
+    merged_methods_longer_pa %>%
+      filter(Site != "SC5") %>% 
+      mutate(Taxon = factor(Taxon,
+                            levels = rev(spp_levels)),
+             Method = ifelse(Method == "Metabarcoding",
+                             "eDNA",
+                             "Tradicional")) %>%  
+      ggplot(aes(y = Taxon,
+                 x = Method,
+                 fill = Presence)) +
+      geom_tile() +
+      facet_grid(cols = vars(Site),
+                 rows = vars(Family),
+                 space = "free",
+                 scales = "free",
+                 drop = TRUE) +
+      # scale_fill_manual(values = c("Absent" = FALSE,
+      #                              "Present" = TRUE)) +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text.x = element_text(size = 14, 
+                                       angle = 45,
+                                       hjust = 1),
+            axis.text.y = element_text(face = "italic",
+                                       size = 14),
+            strip.text.x = element_text(size = 14,
+                                        face = "bold"),
+            strip.text.y = element_text(angle = 0,
+                                        size = 14,
+                                        face = "bold"),
+            legend.position = "none",
+            legend.key.height = unit(3, "cm"),
+            axis.title.x = element_text(size = 16,
+                                        face = "bold"),
+            axis.title.y = element_text(size = 16,
+                                        face = "bold")) +
+      labs(x = "Método")
+
+    # Export plot
+    ggsave(plot = tile_plot_methods,
+           filename = paste0(figs_path, "/tile_plot_methods", "_",
+                             Sys.Date(), ".pdf"),
+           units = "cm",
+           height = 50,
+           width = 25,
+           dpi = 1200) 
+
+    tile_plot_methods
+    ```
+
 ### Bar plots
 
 ```{r}
 taxa_sample_longer %>% 
-  ggplot(aes(x = Sample,
-             y = `%`,
+  ggplot(aes(x = Site,
+             y = `%` / 3,
              fill = Order,
-             width = 1)) +
+             width = 0.95)) +
   geom_bar(stat = "identity", 
            position = "stack") +
    scale_fill_manual(values = palette_5)
@@ -1727,16 +1898,12 @@ This section assesses how species richness increases with sampling effort, both 
 -   Presence/absence transformation and computation of overall species accumulation curve.
 
     ```{r}
-    # Binary function (presence/absence)
-    jaccarize <- function(x) {
-      ifelse(x == 0, 0, 1)
-      }
     # Transform abundances to binary data
     taxa_sample_wider_jac  <- 
       taxa_sample_wider  %>%
       mutate(across(c(3:ncol(.)), 
                     jaccarize))
-
+    
     # Collector curve
     accum_all <- 
       specaccum(taxa_sample_wider_jac[3:ncol(taxa_sample_wider_jac)],
