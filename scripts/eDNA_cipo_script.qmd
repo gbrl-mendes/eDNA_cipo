@@ -1838,8 +1838,8 @@ This first section provides core analytical functions and sets color palettes fo
                  space = "free",
                  scales = "free",
                  drop = TRUE) +
-      # scale_fill_manual(values = c("Absent" = FALSE,
-      #                              "Present" = TRUE)) +
+      # scale_fill_manual(values = c("Absent" = "#f8766c",
+      #                              "Present" = "#008a0e")) +
       theme(panel.grid.major = element_line(color = "grey",
                                             linewidth = 0.2,
                                             linetype = 1),
@@ -1888,6 +1888,76 @@ taxa_sample_longer %>%
   # facet_grid(cols = vars(Site),
   #            scales = "free_x")
 ```
+
+### Venn Diagram
+
+-   This section prepares data to identify common and exclusive species between different monitoring methods and sampling sites. The resulting tables can be used to create Venn diagrams.
+
+    ```{r}
+    # Common species between eDNA and Traditional Methods
+    spp_comm <- merged_methods_longer %>%
+      group_by(Taxon) %>%
+      summarise(n_Level = n_distinct(Method)) %>%
+      filter(n_Level >= 2) %>%
+      select(Taxon)
+
+    spp_comm
+        
+    # Exclusive species to eDNA and Traditional Methods
+    spp_diff <- merged_methods_longer %>%
+      group_by(Taxon) %>%
+      summarise(eDNA_count = sum(as.integer(Method == "Metabarcoding")),
+                Traditional_count = sum(as.integer(Method == "Traditional")),
+                eDNA_only = eDNA_count >= 1 & Traditional_count == 0,
+                Traditional_only = eDNA_count == 0 & Traditional_count >= 1) %>%
+      ungroup()
+          
+    spp_diff
+
+    # Common species across all sites
+    spp_comm_sites <- merged_methods_longer %>%
+      group_by(Taxon) %>%
+      summarise(n_Sites = n_distinct(Site)) %>%
+      filter(n_Sites == 4) %>%
+      select(Taxon)
+
+    spp_comm_sites
+        
+    # Exclusive species to each sample site
+    spp_diff_sites <- resume_venn %>%
+      group_by(Taxon) %>%
+      summarise(SC1_count = sum(as.integer(Site == "SC1")),
+          SC2_count = sum(as.integer(Site == "SC2")),
+          SC3_count = sum(as.integer(Site == "SC3")),
+          SC4_count = sum(as.integer(Site == "SC4")),
+          SC5_count = sum(as.integer(Site == "SC5")),
+          SC6_count = sum(as.integer(Site == "SC6")),
+          SC7_count = sum(as.integer(Site == "SC7")),
+          SC1_only = SC1_count >= 1 & SC2_count == 0 & 
+                    SC3_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC2_only = SC2_count >= 1 & SC1_count == 0 & 
+                    SC3_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC3_only = SC3_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC4_only = SC4_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC5_only = SC5_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC6_only = SC6_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC5_count == 0 & SC7_count == 0,
+          SC7_only = SC7_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
+      ungroup()
+
+    spp_diff_sites
+    ```
 
 ### Species accumulation curves
 
