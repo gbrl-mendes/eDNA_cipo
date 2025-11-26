@@ -463,17 +463,6 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       as_tibble()
     ```
 
--   Traditional methods capture data.
-
-    ```{r}
-    traditional_results <-  
-      read.csv(paste0(data_path, "/coleta_tradicional-eDNA_cipo-151125.csv"),
-               sep = ",", 
-               check.names = FALSE) %>%
-      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>% 
-      as_tibble()
-    ```
-
 ### Corrections
 
 -   Correcting columns.
@@ -1442,14 +1431,16 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
       mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
-      reframe("Local" = `Metadata 1`,
-              "Taxon (Curated ID)" = `Curated ID`,
-              "Abundância" = Reads,
+      reframe("Site" = `Metadata 1`,
+              "Taxon" = `Curated ID`,
+              Reads,
               `%`) %>% 
       unique() %>% 
-      pivot_wider(id_cols = `Taxon (Curated ID)`,
-                 names_from = Local,
-                 values_from = `%`)
+      pivot_wider(id_cols = Site,
+                 names_from = Taxon,
+                 values_from = Reads) %>%
+  mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+  print()
 
     # Orders for each taxon detected previously
     ordens_f <- 
@@ -1499,7 +1490,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
 -   Traditional methods capture data retrieval.
 
     ```{r}
-    traditional_results <-  
+    traditional_results_raw <-  
       read.csv(paste0(data_path, "/coleta_tradicional-eDNA_cipo-171125.csv"),
                sep = ",", 
                check.names = FALSE) %>%
@@ -1514,7 +1505,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     ```{r}
     # Retrieve curated genera
     traditional_results <-
-      traditional_results %>% 
+      traditional_results_raw %>% 
       mutate("Genus" = word(Taxon, 1)) %>% 
       relocate(Taxon, Genus)
 
@@ -1539,11 +1530,15 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       na.omit()
 
     # Join curated taxonomy with original data
-    traditional_results <- 
+    traditional_results_summ <- 
       traditional_results %>% 
       left_join(curated_taxonomy_rdx, 
                 by = join_by(Genus)) %>% 
-      relocate(Order, Family, Genus, Taxon)
+      relocate(Order, Family, Genus, Taxon) %>% 
+      mutate(Site = apply(across(starts_with("SC")), 1, function(x) {
+        paste(names(x)[as.logical(x) & !is.na(x)], collapse = ", ")
+        })) %>% 
+      select(-c(SC1, SC2, SC3, SC4, SC6, SC7))
     ```
 
 -   Longer Table
@@ -1558,6 +1553,20 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       filter(!is.na(Ocurrence)) %>% 
       mutate(Method = "Traditional")
     ```
+
+-   Wider Table
+
+    ```{r}
+    # Wider list grouped by site
+    traditional_wider <- 
+    traditional_longer %>%
+      pivot_wider(id_cols = c(Site),
+                  names_from = Taxon,
+                  values_from = Ocurrence) %>% 
+      mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+      print()
+    ```
+
 
 - Absence/Presence table
 
@@ -1613,17 +1622,27 @@ This first section provides core analytical functions and sets color palettes fo
 
     ```{r}
     # Color palettes for each site 
-    site_colors <- c("SC1" = "#67322EFF", "SC2" = "#9C593EFF", "SC3" = "#DDA569FF", "SC4" = "#3F4330FF",
-                     "SC5" = "#2C6B67FF", "SC6" = "#2A4866FF", "SC7" = "#6592B0FF")
+    site_colors <- c("SC1" = "#67322EFF", "SC2" = "#9C593EFF", "SC3" = "#DDA569FF", 
+                     "SC4" = "#3F4330FF", "SC5" = "#2C6B67FF", "SC6" = "#2A4866FF", 
+                     "SC7" = "#6592B0FF")
 
     # Color palette for overall sample
     all_colors <- c("#175449FF")
     ```
 
+-   Method colors
+
+    ```{r}
+    method_colors <- c("eDNA" = "#c4dfff", 
+                       "Tradicional" = "#99d09e")
+    ```
+
+
 -   Create palletes
 
     ```{r}
-    colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF","#2C6B67FF","#2A4866FF","#6592B0FF"))
+    colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF",
+                         "#2C6B67FF","#2A4866FF","#6592B0FF"))
 
     palette_function <- colorRampPalette(colors_base)
 
@@ -1675,8 +1694,8 @@ This first section provides core analytical functions and sets color palettes fo
     # Plot
     tile_plot_sample <-
     taxa_sample_longer %>%
-      mutate(Taxon = factor(Taxon, 
-                           levels = rev(spp_levels))) %>%  
+      mutate(Taxon = factor(Taxon,
+                            levels = rev(spp_levels))) %>%  
       ggplot(aes(y = Taxon,
                  x = Amostra,
                  fill = `%`)) +
@@ -1750,13 +1769,13 @@ This first section provides core analytical functions and sets color palettes fo
     # Plot
     tile_plot_site <-
     taxa_sample_longer %>%
-      mutate(Taxon = factor(Taxon, 
-                           levels = rev(spp_levels))) %>%  
+      mutate(Taxon = factor(Taxon,
+                            levels = rev(spp_levels))) %>%  
       ggplot(aes(y = Taxon,
-                 x = Local,
+                 x = Site,
                  fill = `%`)) +
       geom_tile() +
-      facet_grid(rows = vars(Familia),
+      facet_grid(rows = vars(Family),
                  space = "free",
                  scales = "free",
                  drop = TRUE) +
@@ -1796,24 +1815,24 @@ This first section provides core analytical functions and sets color palettes fo
             axis.title.y = element_text(size = 16,
                                         face = "bold")) +
       labs(fill = "%",
-           x = "Local",
+           x = "Ponto amostral",
            y = "Taxa")
 
     # Export plot
-    # ggsave(plot = tile_plot_site,
-    #        filename = paste0(figs_path, "/tile_plot_site", "_",
-    #                          Sys.Date(), ".pdf"),
-    #        units = "cm",
-    #        height = 35,
-    #        width = 25,
-    #        dpi = 1200)
+    ggsave(plot = tile_plot_site,
+           filename = paste0(figs_path, "/tile_plot_site", "_",
+                             Sys.Date(), ".png"),
+           units = "cm",
+           height = 35,
+           width = 25,
+           dpi = 600)
 
     tile_plot_site
-    ```
+```
 
 #### Metabarcoding vs Traditional Methods
 
--   Species comparation per site
+-   Species comparation per site.
 
     ```{r}
     # Define factor Locals for plot
@@ -1822,8 +1841,10 @@ This first section provides core analytical functions and sets color palettes fo
 
     # Plot
     tile_plot_methods <-
-    merged_methods_longer_pa %>%
+    merged_methods_longer %>%
       filter(Site != "SC5") %>% 
+      mutate(Site = "Resumo") %>% 
+      dplyr::bind_rows(data_sem_5) %>% 
       mutate(Taxon = factor(Taxon,
                             levels = rev(spp_levels)),
              Method = ifelse(Method == "Metabarcoding",
@@ -1831,15 +1852,14 @@ This first section provides core analytical functions and sets color palettes fo
                              "Tradicional")) %>%  
       ggplot(aes(y = Taxon,
                  x = Method,
-                 fill = Presence)) +
-      geom_tile() +
+                 fill = Method)) +
+      geom_tile(color = "#858585", size = 0.1) +
       facet_grid(cols = vars(Site),
                  rows = vars(Family),
                  space = "free",
                  scales = "free",
                  drop = TRUE) +
-      # scale_fill_manual(values = c("Absent" = "#f8766c",
-      #                              "Present" = "#008a0e")) +
+      scale_fill_manual(values = method_colors) +
       theme(panel.grid.major = element_line(color = "grey",
                                             linewidth = 0.2,
                                             linetype = 1),
@@ -1859,19 +1879,20 @@ This first section provides core analytical functions and sets color palettes fo
                                         face = "bold"),
             axis.title.y = element_text(size = 16,
                                         face = "bold")) +
-      labs(x = "Método")
+      labs(x = "Método",
+           y = "Taxa")
 
     # Export plot
     ggsave(plot = tile_plot_methods,
            filename = paste0(figs_path, "/tile_plot_methods", "_",
-                             Sys.Date(), ".pdf"),
+                             Sys.Date(), ".png"),
            units = "cm",
            height = 50,
-           width = 25,
-           dpi = 1200) 
+           width = 35,
+           dpi = 600)
 
     tile_plot_methods
-    ```
+```
 
 ### Bar plots
 
@@ -1958,6 +1979,77 @@ taxa_sample_longer %>%
 
     spp_diff_sites
     ```
+
+
+    ```{r}
+    # Only at species level
+    species_level_edna <-
+    merged_methods_longer %>% 
+      filter(Method == "Metabarcoding",
+             !str_detect(Taxon, "^\\w+\\s+sp\\.? ?\\d?$")) %>% 
+      select(Taxon) %>% 
+      pull() %>%
+      unique()
+    
+    # Common species between eDNA and Traditional Methods
+    spp_comm <-
+    merged_methods_longer %>% 
+      filter(Taxon %in% species_level_edna) %>%
+      group_by(Taxon) %>%
+      summarise(n_Level = n_distinct(Method)) %>%
+      filter(n_Level >= 2) %>%
+      select(Taxon)
+    
+    spp_comm
+    
+    # Exclusive species to eDNA and Traditional Methods
+    spp_diff <- merged_methods_longer %>%
+      filter(Taxon %in% species_level_edna) %>%
+      group_by(Taxon) %>%
+      summarise(eDNA_count = sum(as.integer(Method == "Metabarcoding")),
+                Traditional_count = sum(as.integer(Method == "Traditional")),
+                eDNA_only = eDNA_count >= 1 & Traditional_count == 0,
+                Traditional_only = eDNA_count == 0 & Traditional_count >= 1) %>%
+      ungroup()
+          
+    spp_diff
+    
+    # Exclusive species to each sample site
+    spp_diff_sites <- resume_venn %>%
+      group_by(Taxon) %>%
+      summarise(SC1_count = sum(as.integer(Site == "SC1")),
+          SC2_count = sum(as.integer(Site == "SC2")),
+          SC3_count = sum(as.integer(Site == "SC3")),
+          SC4_count = sum(as.integer(Site == "SC4")),
+          SC5_count = sum(as.integer(Site == "SC5")),
+          SC6_count = sum(as.integer(Site == "SC6")),
+          SC7_count = sum(as.integer(Site == "SC7")),
+          SC1_only = SC1_count >= 1 & SC2_count == 0 & 
+                    SC3_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC2_only = SC2_count >= 1 & SC1_count == 0 & 
+                    SC3_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC3_only = SC3_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC4_only = SC4_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC5_only = SC5_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC6_count == 0 & SC7_count == 0,
+          SC6_only = SC6_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC5_count == 0 & SC7_count == 0,
+          SC7_only = SC7_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
+      ungroup()
+
+    spp_diff_sites
+    ```
+
 
 ### Species accumulation curves
 
@@ -2216,26 +2308,44 @@ This section assesses how species richness increases with sampling effort, both 
 -   **Data preparation**
 
     ```{r}
-    alpha_site_tbl <-
-      taxa_sample_longer %>%
-      group_by(Sample) %>%  
-      reframe(Site = Site,
-              Observado = specnumber(`%`),
-              Shannon = diversity(`%`, index = "shannon"),
-              Simpson = diversity(`%`, index = "simpson"),
-              Invsimpson = 1/Simpson,
-              n = sum(`%`)) %>%  
-      pivot_longer(cols = c(Observado, 
+    # Diversity by Sample
+    alpha_sample_tbl <- 
+      taxa_sample_wider %>%
+      rowwise() %>%
+      reframe(Amostra,
+              Local, 
+              Observed = specnumber(c_across(3:ncol(taxa_sample_wider))),
+             Shannon = diversity(c_across(3:ncol(taxa_sample_wider)), index = "shannon"),
+             Simpson = diversity(c_across(3:ncol(taxa_sample_wider)), index = "simpson")) %>%
+      ungroup() %>%
+      pivot_longer(cols = c(Observed, 
                             Shannon, 
-                            Invsimpson, 
                             Simpson),
-                   names_to = "index") 
+                   names_to = "index") %>%
+      mutate(Method = "Metabarcoding") %>% 
+      print()
+  
+    # Diversity by Site
+    alpha_site_tbl <- 
+      taxa_site_wider %>%
+      rowwise() %>%
+      reframe(Site,
+              Observed = specnumber(c_across(2:ncol(taxa_site_wider))),
+              Shannon = diversity(c_across(2:ncol(taxa_site_wider)), index = "shannon"),
+              Simpson = diversity(c_across(2:ncol(taxa_site_wider)), index = "simpson")) %>%
+      ungroup() %>%
+      pivot_longer(cols = c(Observed, 
+                            Shannon, 
+                            Simpson),
+                   names_to = "index") %>%
+      mutate(Method = "Metabarcoding") %>% 
+      print()
     ```
 
 -   **Boxplot Alpha-Diversity**
 
     ```{r}
-    alpha_site_tbl %>%
+    alpha_sample_tbl %>%
       filter(index %in% c("Observado",
                           "Simpson")) %>% 
       ggplot(aes(x = Site,
@@ -2261,6 +2371,139 @@ This section assesses how species richness increases with sampling effort, both 
       labs(x = "Local",
            y = "Valor")
     ```
+  
+#### Metabarcoding vs Traditional Methods
+
+-   **Data preparation**
+
+    ```{r}
+    # Alpha-diversity for each site for traditional methods data
+    alpha_traditional_tbl <- 
+      traditional_wider %>%
+      rowwise() %>%
+      reframe(Site,
+              Observed = specnumber(c_across(2:ncol(traditional_wider))),
+             Shannon = diversity(c_across(2:ncol(traditional_wider)), index = "shannon"),
+             Simpson = diversity(c_across(2:ncol(traditional_wider)), index = "simpson")
+             ) %>%
+      ungroup() %>%
+      pivot_longer(cols = c(Observed, 
+                            Shannon, 
+                            Simpson),
+                   names_to = "index") %>%
+      mutate(Method = "Traditional") %>% 
+      print()
+    
+    # Bind rows
+    alpha_methods <-
+      alpha_traditional_tbl %>% 
+      bind_rows(alpha_site_tbl)
+    ```
+
+-   **Wilcoxon test**
+
+    ```{r}
+    # Alpha-diversity Observed index
+    alpha_observed <-
+      alpha_methods %>% 
+      filter(index %in% "Observed",
+             Site != "SC5") %>% 
+      pivot_wider(names_from = c(Method),
+                  id_cols = Site,
+                  values_from = value)
+    
+      wilcox.test(x = alpha_observed$Metabarcoding,
+                  y = alpha_observed$Traditional,
+                  paired = TRUE,
+                  alternative = "greater",
+                  conf.int = TRUE)
+    ```
+
+-   **Barplot Alpha-Diversity**   
+
+    ```{r}
+    barplot_alpha_methods <-
+        alpha_methods %>% 
+        filter(index != "Shannon") %>% 
+        ggplot(aes(x = Site,
+                   y = value,
+                   fill = Site)) +
+        geom_col() +
+        geom_text(aes(label = round(value, 2)), vjust = -0.5) +
+        # geom_point(aes(fill = Sample)) +
+        facet_grid(rows = vars(index),
+                   cols = vars(Method),
+                   scales = "free",
+                   labeller = labeller(Method = c(Metabarcoding = "eDNA Metabarcoding",
+                                                  Traditional = "Métodos Tradicionais"), 
+                                       index = c(Observed = "Observado",
+                                                 Simpson = "Simpson"))) +
+        scale_fill_manual(values = site_colors) +
+        stat_compare_means(method = "wilcox.test",
+                           paired = TRUE,
+                           method.args = list(alternative = "greater")) +
+        theme(panel.grid.major = element_line(color = "grey",
+                                              linewidth = 0.2,
+                                              linetype = 1),
+              axis.text.x = element_text(size = 14),
+              axis.text.y = element_text(size = 14),
+              strip.text = element_text(size = 14,
+                                        face = "bold"),
+              legend.position = "none",
+              legend.key.height = unit(3, "cm"),
+              axis.title.x = element_text(size = 16,
+                                          face = "bold"),
+              axis.title.y = element_text(size = 16,
+                                          face = "bold")) +
+        labs(x = "Local",
+             y = "Valor")
+    
+    # Export plot
+    ggsave(plot = barplot_alpha_methods, 
+           filename = paste0(figs_path, "/barplot_alpha_methods", "-",
+                             Sys.Date(), ".png", sep = ""),
+           units = "cm", 
+           height = 22.5, 
+           width = 20, 
+           dpi = 600)
+
+    barplot_alpha_methods
+    
+    ```
+
+-   **Boxplot Alpha-Diversity** 
+
+    ```{r}
+    alpha_methods %>% 
+      filter(index == "Observed",
+             Site != "SC5") %>%
+      mutate(Method = ifelse(Method == "Metabarcoding",
+                             "eDNA",
+                             "Tradicional")) %>% 
+      ggplot(aes(x = Method,
+                 y = value,
+                 fill = Method)) +
+      geom_boxplot() +
+      stat_compare_means(method = "wilcox.test",
+                         paired = TRUE,
+                         comparisons = list(c("eDNA", "Tradicional")),
+                         method.args = list(alternative = "greater")) +
+      scale_fill_manual(values = method_colors) +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text.x = element_text(size = 14),
+            axis.text.y = element_text(size = 14),
+            strip.text = element_text(size = 14,
+                                      face = "bold"),
+            legend.position = "none",
+            legend.key.height = unit(3, "cm"),
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
+      labs(x = "Método",
+           y = "Valor")
+    ```
+
 
 ### Principal Coordinates Analysis (PCoA)
 
