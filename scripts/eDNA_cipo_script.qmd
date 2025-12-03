@@ -1,5 +1,4 @@
 ---
-76---
 title: "Análise de eDNA metabarcoding Cipó"
 author: "Gabriel A. Mendes"
 format: html
@@ -10,31 +9,31 @@ editor_options:
 
 # Cipó's eDNA metabarcoding project
 
-## Introduction
-
--   All scripts used for the project "DNA ambiental no monitoramento da ictiofauna do Parque Nacional da Serra do Cipó".
+## 1. Setup & Configuration
 
 ### Packages
 
-```{r}
-library("tidyverse")
-library("Biostrings")
-library("DECIPHER")
-library("phyloseq")
-library("vegan")
-library("readxl")
-library("writexl")
-library("ggpubr")
-library("ggplot2")
-library("ggsignif")
-library("ggrepel")
-library("openxlsx")
-library("colorspace")
-```
+-   **Load libraries.** Import all necessary packages for data manipulation, ecological analysis, and data visualization.
 
-### Directory creation
+    ```{r}
+    library("tidyverse")
+    library("Biostrings")
+    library("DECIPHER")
+    library("phyloseq")
+    library("vegan")
+    library("readxl")
+    library("writexl")
+    library("ggpubr")
+    library("ggplot2")
+    library("ggsignif")
+    library("ggrepel")
+    library("openxlsx")
+    library("colorspace")
+    ```
 
--   Directory creation for analysis workflow and saving results.
+### Directory Management
+
+-   **Create directory structure.** Define project paths and ensure folders for scripts, results, figures, and tables exist.
 
     ```{r}
     {
@@ -52,21 +51,97 @@ library("colorspace")
 
     for (dir in paths) {
       if (dir.exists(dir)) {
-    print(paste("O diretório", dir, "já existe!"))
+    print(paste("The folder", dir, "already exists!"))
       } else {
-    print(paste("Criando", dir, "!" ))
+    print(paste("Creating", dir, "!" ))
     dir.create(dir) 
       }
     }
     ```
 
-## Pre-analysis
+### Housekeeping
 
-Preliminary analysis of raw data without integrative curation of ASVs.
+-   **Load helper functions.** Source external scripts for taxonomy retrieval and data transformation tasks.
 
-### Raw data import
+    ```{r}
+    # Function to handle character and numeric vectors when pivoting
+    sum_uniq <- function(vec) {
+      if (is.character(vec)) {
+        suniq <- BiocGenerics::unique(vec)
+      }
+      if (is.numeric(vec)) {
+        suniq <- sum(vec)
+      }
+      return(suniq)
+    }
 
--   Load full results table with unfiltered data.
+    # Binary function (presence/absence)
+    jaccarize <- function(x) {
+      ifelse(x == 0, 0, 1)
+      }
+    ```
+
+-   **Load custom functions.** Custom functions for taxonomy retrievel.
+
+    ```{r}
+    # Retrieve taxID
+    source("/home/gabriel/functions/retrieve_taxid.R")
+
+    # Retrieve full taxonomy from taxID
+    source("/home/gabriel/functions/retrieve_taxonomy.R")
+    ```
+
+-   **Define color palettes.** Set consistent color schemes for taxonomic groups and visualizations.
+
+    ```{r}
+    # Color palettes for each site 
+    site_colors <- c("SC1" = "#67322EFF", "SC2" = "#9C593EFF", "SC3" = "#DDA569FF", 
+                     "SC4" = "#3F4330FF", "SC5" = "#2C6B67FF", "SC6" = "#2A4866FF", 
+                     "SC7" = "#6592B0FF")
+
+    # Color palette for overall sample
+    all_colors <- c("#175449FF")
+
+    # Colors for each sampling method.
+    method_colors <- c("eDNA" = "#c4dfff", 
+                       "Tradicional" = "#99d09e")
+
+    # Create palletes
+    colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF",
+                         "#2C6B67FF","#2A4866FF","#6592B0FF"))
+
+    palette_function <- colorRampPalette(colors_base)
+
+    palette_full <- palette_function(200)
+
+    # 50 colors
+    index_colors_50 <- seq(1, 200, length.out = 50)
+
+    palette_50 <- palette_full[index_colors_50]
+
+    # 20 colors
+    index_colors_20 <- seq(1, 200, length.out = 20)
+
+    palette_20 <- palette_full[index_colors_20]
+
+    # 20 colors
+    index_colors_20 <- seq(1, 200, length.out = 20)
+
+    palette_20 <- palette_full[index_colors_20]
+
+    # 5 colors
+    index_colors_5 <- seq(1, 200, length.out = 5)
+
+    palette_5 <- palette_full[index_colors_5]
+    ```
+
+## 2. Data Processing: Metabarcoding Pipeline Raw Data
+
+### Stage 1: Raw Data Screening (Pre-analysis)
+
+#### Import Raw Data
+
+-   **Load raw results.** Import the full output table from the bioinformatics pipeline, converting empty strings to NA for consistency.
 
     ```{r}
     raw_pre_results <-
@@ -80,9 +155,9 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       as_tibble()
     ```
 
-### Filtering
+#### Pre-filtering & Quality Checks
 
--   Conduct preliminary taxonomic and quality filtering. Remove ASVs with sizes outside the expected amplicon range (120–240 bp), unidentified sequences, non-fish taxonomic groups, and those found in filtration and extraction controls.
+-   **Apply preliminary filters.** Remove ASVs outside the expected length (120–240 bp), non-target taxa (non-Actinopteri), and potential contaminants found in controls.
 
     ```{r}
     pre_results_filt <-
@@ -99,9 +174,9 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     #              Sys.Date(), ".csv", sep = ""))
     ```
 
-### Analysis of removed data
+#### Assessment of Excluded Data
 
--   Build table with entries removed in preliminary filtering.
+-   **Isolate removed sequences.** Create a dataset of ASVs excluded during filtering to analyze what is being discarded.
 
     ```{r}
     # ASVs excluded from the dataset 
@@ -139,7 +214,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
     ```
 
--   Summary of removed data. Shows sequence abundance by taxonomic class for each location.
+-   **Summarize excluded data.** Calculate the relative abundance of excluded taxa per site to check for systematic biases (e.g., high non-target DNA in specific sites).
 
     ```{r}
     pre_diff_summ <- 
@@ -168,17 +243,17 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
     ```
 
--   Tile plot for removed entries.
+-   **Visualize excluded taxa.** Generate a tile plot of excluded ASVs to inspect the taxonomic composition of rejected data.
 
     ```{r}
-    # Set species order for the plot
+     # Set species order for the plot
     spp_levels <- 
       sort(unique(pre_data_diff_longer$`Final ID (BLASTn)`))
 
     # Plot
     tile_plot_pre_diff <-
     pre_data_diff_longer %>%
-      mutate(`Final ID (BLASTn)` = factor(`Final ID (BLASTn)`, 
+      mutate(`Final ID (BLASTn)` = factor(`Final ID (BLASTn)`,
                                           levels = rev(spp_levels)),
              `Class (NCBI)` = ifelse(`Class (NCBI)` == "", NA, 
                                      `Class (NCBI)`),
@@ -246,345 +321,139 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     tile_plot_pre_diff
     ```
 
-### Pre-curation metrics
+### Stage 2: Curated Data Refinement
 
--   Total number of reads, ASVs, Orders, Families, Genera, Species, and Non-species before curation.
+#### Import Curated Data & Taxonomies
 
-    ```{r}
-    raw_stats <-
-      raw_pre_results %>%
-      filter(`Class (NCBI)` == "Actinopteri") %>% 
-      group_by(`Order (NCBI)`) %>%
-      reframe("Reads totais" = sum(`ASV absolute abundance`),
-              "ASVs" = n_distinct(`ASV header`),
-              "OTUs" = n_distinct(OTU),
-              "Familias" = n_distinct(`Family (NCBI)`),
-              "Generos" = n_distinct(`Genus (NCBI)`),
-              "Especies" = n_distinct(`Curated ID`[grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) 
-                                                     & !grepl("sp\\.", `Curated ID`)]),
-              "N-Especies" = n_distinct(`Curated ID`) - Especies ) %>% 
-      print()
-    ```
-
-### Preliminary Species List
-
--   Species list to be used in curation, in *longer* format.
-
-    ```{r}
-    # Longer format list (grouped by sample)
-    pre_taxa_filt_longer <- 
-      pre_results_filt %>%
-      select(Sample, 
-             `ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             `Final ID (BLASTn)`,
-             ends_with("(NCBI)"), 
-             `ASV header`, 
-             `ASV (Sequence)`) %>% 
-      group_by(Sample) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Final ID (BLASTn)`, Sample) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
-      reframe("Ordem" = `Order (NCBI)`,
-             "Familia" = `Family (NCBI)`,
-             "Genero" = `Genus (NCBI)`,
-             "Taxon (Final ID)" = `Final ID (BLASTn)`,
-             "Amostra" = Sample,
-             "Local" = `Metadata 1`,
-             Reads,
-             `%`,
-             "Abundancia por amostra" = `Sample abundance`
-             ) %>% 
-      unique() %>% 
-      print()
-
-    # Longer format list (grouped by Final ID)
-    pre_taxa_filt_summ <-
-      pre_results_filt %>%
-      select(Sample, 
-             `ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             `Final ID (BLASTn)`,
-             ends_with("(NCBI)"), 
-             `ASV header`, 
-             `ASV (Sequence)`) %>% 
-      mutate("Total abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Final ID (BLASTn)`) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate("%" = round(Reads / `Total abundance` * 100, 3)) %>% 
-      select("Ordem" = `Order (NCBI)`,
-             "Familia" = `Family (NCBI)`,
-             "Genero" = `Genus (NCBI)`,
-             "Taxon (Final ID)" = `Final ID (BLASTn)`,
-             "Amostra" = Sample,
-             "Local" = `Metadata 1`,
-             Reads,
-             `%`,
-             "Abundancia total" = `Total abundance`) %>% 
-      unique() %>% 
-      print()
-    ```
-
--   Species list in *wider* format.
-
-    ```{r}
-    # Wider format list (grouped by site)
-    pre_taxa_filt_wider <-
-      pre_results_filt %>%
-      select(Sample, 
-             `ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             `Final ID (BLASTn)`,
-             ends_with("(NCBI)"), 
-             `ASV header`, 
-             `ASV (Sequence)`) %>% 
-      group_by(`Metadata 1`) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Final ID (BLASTn)`, `Metadata 1`) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
-      reframe("Local" = `Metadata 1`,
-              "Taxon (Final ID)" = `Final ID (BLASTn)`,
-              "Abundância" = Reads,
-              `%`) %>% 
-      unique() %>% 
-      pivot_wider(id_cols = `Taxon (Final ID)`,
-                 names_from = Local,
-                 values_from = `%`)
-
-    # Orders for each taxon detected previously
-    ordens <- 
-      pre_results_filt %>% 
-      reframe("Taxon (Final ID)" = `Final ID (BLASTn)`,
-              "Ordem" = `Order (NCBI)`) %>% 
-      unique()
-
-    # Complete species list in wider format with corresponding orders
-    raw_taxa_filt <- 
-      pre_taxa_filt_wider %>% 
-      left_join(ordens,
-                by = "Taxon (Final ID)") %>% 
-      relocate(Ordem,
-               `Taxon (Final ID)`) %>% 
-      print()
-    ```
-
--   Preliminary tile plot to analyze species per sample.
-
-    ```{r}
-    # Define species order for plotting
-    spp_levels <- 
-      sort(unique(pre_taxa_filt_longer$`Taxon (Final ID)`))
-
-    # Plot
-    tile_plot_pre <-
-    pre_taxa_filt_longer %>%
-      mutate(`Taxon (Final ID)` = factor(`Taxon (Final ID)`,
-                                         levels = rev(spp_levels))) %>%  
-      ggplot(aes(y = `Taxon (Final ID)`,
-                 x = Amostra,
-                 fill = `%`)) +
-      geom_tile() +
-      facet_grid(cols = vars(Local),
-                 rows = vars(Familia),
-                 space = "free",
-                 scales = "free",
-                 drop = TRUE) +
-      scale_fill_gradientn(name = "%",
-                           colours = rev(c("#30123BFF",
-                                           "#4662D7FF",
-                                           "darkgreen",
-                                           "#72FE5EFF",
-                                           "#C7EF34FF",
-                                           "#FABA39FF",
-                                           "#F66B19FF",
-                                           "#CB2A04FF",
-                                           "#7A0403FF")),
-        values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5, 5, 10, 25, 50, 75, 100)),
-        breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00, 25.00, 50.00, 100.00),
-        labels = scales::number_format(accuracy = 0.01),
-        limits = c(0.01, 100),
-        na.value = "#7A0403FF",
-        trans = "log10") +
-      theme(panel.grid.major = element_line(color = "grey",
-                                            linewidth = 0.2,
-                                            linetype = 1),
-            axis.text.x = element_text(angle = 45,
-                                       vjust = 1,
-                                       hjust = 1,
-                                       size = 14),
-            axis.text.y = element_text(face = "italic",
-                                       size = 14),
-            strip.text.x = element_text(size = 14,
-                                        face = "bold"),
-            strip.text.y = element_text(angle = 0,
-                                        size = 14,
-                                        face = "bold"),
-            legend.position = "right",
-            legend.key.height = unit(3, "cm"),
-            axis.title.x = element_text(size = 16,
-                                        face = "bold"),
-            axis.title.y = element_text(size = 16,
-                                        face = "bold")) +
-      labs(fill = "%",
-           x = "Replicatas",
-           y = "Taxa")
-
-    # Salvar figura
-    # ggsave(plot = tile_plot_pre_taxa,
-    #        filename = paste0(figs_path, "/tile_plot_filt", "_",
-    #                          Sys.Date(), ".pdf"),
-    #        units = "cm",
-    #        height = 35,
-    #        width = 35,
-    #        dpi = 1200)
-
-    tile_plot_pre
-    ```
-
-## eDNA Curated Data Analysis
-
-### Data retrieval
-
--   eDNA metabarcoding data with curated identifications (Curated IDs) after literature verification and expert analysis.
+-   **Load curated dataset.** Import the manually verified dataset where taxonomic assignments have been corrected by experts.
 
     ```{r}
     raw_curated_results <-
-      read.csv(paste0(data_path, "/resultados_completos-eDNA_Cipo-301025.csv"),
+      read.csv(paste0(data_path, "/resultados_completos-eDNA_Cipo-301025.csv"), 
                sep = ",",
                check.names = FALSE) %>%
-       mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>% 
+      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>%
       as_tibble()
     ```
 
-### Corrections
+#### Taxonomic Correction & Cleanup
 
--   Correcting columns.
+-   **Standardize taxonomy.** Correct specific inconsistent assignments (e.g., *Brycon* aff., *Rhamdia* aff.) and extract clean Genus/Family/Order levels from the curated IDs.
 
     ```{r}
     raw_curated_results <-
-      raw_curated_results %>% 
-      mutate("Final ID (BLASTn)" = ifelse(`Final ID (BLASTn)` %in% ("Brycon aff."), # Correcoes de Final ID
-                                          "Brycon aff. devillei", `Final ID (BLASTn)`), 
-             "Final ID (BLASTn)" = ifelse(`Final ID (BLASTn)` %in% ("Rhamdia aff."), 
-                                          "Rhamdia aff. quelen", `Final ID (BLASTn)`), # Correcoes de Final ID
-             "Genus (Curated ID)" = word(`Curated ID`, 1)) # Criando coluna de generos corretos
+      raw_curated_results %>%
+      mutate("Final ID (BLASTn)" =
+               ifelse(`Final ID (BLASTn)` %in% ("Brycon aff."), 
+                      "Brycon aff. devillei", `Final ID (BLASTn)`),
+             "Final ID (BLASTn)" =
+               ifelse(`Final ID (BLASTn)` %in% ("Rhamdia aff."),
+                      "Rhamdia aff. quelen",
+                      `Final ID (BLASTn)`),
+             "Genus (Curated ID)" = word(`Curated ID`, 1))
     ```
 
--   Correcting taxonomies.
+-   **Retrieve full taxonomy.** Use the `retrieve_taxonomy` function to fill in missing higher-level taxonomic ranks (Order, Family) based on the curated Genera.
 
     ```{r}
     # Retrieve curated genera
     raw_curated_results <-
-      raw_curated_results %>% 
+      raw_curated_results %>%
       mutate("Genus (Curated ID)" = word(`Curated ID`, 1))
 
     # Extract genera
-    curated_genus <- 
-      word(raw_curated_results$`Curated ID`, 1) %>% 
-      na.omit() %>% 
+    curated_genus <-
+      word(raw_curated_results$`Curated ID`, 1) %>%
+      na.omit() %>%
       unique() 
 
-    # Load TaxId retrieval function
-    source("/home/gabriel/functions/retrieve_taxid.R") 
-
-    # Retrieving TaxIDs
+    # Retrive taxIDs
     taxids <- retrieve_taxid(curated_genus)
 
-    # Load taxonomy retrieval function
-    source("/home/gabriel/functions/retrieve_taxonomy.R") 
+    # Retrieve complete taxonomy
     curated_taxonomy <- retrieve_taxonomy(taxids)
 
-    # # Select only necessary information
-    curated_taxonomy_rdx <- 
-      curated_taxonomy %>% 
-      filter(class == "Actinopteri") %>% 
-      select(order, family, genus) %>% 
+    # Select only necessary information
+    curated_taxonomy_rdx <-
+      curated_taxonomy %>%
+      filter(class == "Actinopteri") %>%
+      select(order, family, genus) %>%
       reframe("Order (Curated ID)" = order,
               "Family (Curated ID)" = family,
-              "Genus (Curated ID)" = genus) %>% 
+              "Genus (Curated ID)" = genus) %>%
       na.omit()
 
     # Join curated taxonomy with original data
     raw_curated_results <- 
       raw_curated_results %>% 
-      left_join(curated_taxonomy_rdx, 
+      left_join(curated_taxonomy_rdx,
                 by = join_by(`Genus (Curated ID)`))
     ```
 
-### Filtering
+#### Final Filtering & Metadata Integration
 
--   Taxonomic and quality filtering post curation: removes ASVs outside expected amplicon size (120–240 bp), unidentified sequences, non-fish taxa, sequences from filtration and extraction controls, contaminations, and those below genus-level taxonomy.
+-   **Apply final quality filters.** Filter the curated dataset for target amplicon length, fish specific classes (*Actinopteri*), and remove any remaining control contaminants.
 
     ```{r}
     curated_results_filt <-
-      raw_curated_results %>%
-      filter(`Primer expected length` != "out of range", # apenas na amplitude desejada
-             `Final ID (BLASTn)` != "", # sem Locals sem identificacao
-             `Class (NCBI)` == "Actinopteri", # apenas peixes
-             !Sample %in% c("SC_bColA", "SC_bExt_0802"), # sem controles
-             `Contamination status` != "Possible contamination", # sem contaminacoes
-             `Metadata 7` == "ok") # apenas a nivel de genero e especie 
+          raw_curated_results %>%
+          filter(`Primer expected length` != "out of range", # apenas na amplitude desejada
+                 `Final ID (BLASTn)` != "", # sem Locals sem identificacao
+                 `Class (NCBI)` == "Actinopteri", # apenas peixes
+                 !Sample %in% c("SC_bColA", "SC_bExt_0802"), # sem controles
+                 `Contamination status` != "Possible contamination", # sem contaminacoes
+                 `Metadata 7` == "ok") # apenas a nivel de genero e especie
     ```
 
-### Improvements
-
--   Remove unused columns.
+-   **Select relevant columns.** Drop technical columns (e.g., PCR primer details, detailed BLAST stats) to create a clean analytical dataframe.
 
     ```{r}
     curated_results_rszd <-
-      curated_results_filt %>%
-      select(-c(Researcher, Project, Identification,
-                `Identification Max. taxonomy`, Primer, `Read origin`,
-                `Metadata 7`, `Metadata 8`, `Metadata 9`, `Metadata 10`,
-                `Metadata 11`, `Metadata 12`,
-                obs, `Primer expected length`, `Possible Metazoa`,
-                `blast ID Origin`, `ID status`, `Contamination status`, 
-                `ASV (Sequence)`, `PCR Control`, `Prop. to Ext control`,
-                `Prop. to PCR control`, `Prop. to Filt control`, Type,
-                `1_mismatches`, `1_gaps`, `1_query start`, 
-                `1_query end`, `1_subject start`, `1_subject end`,
-                `1_bitscore`, `2_mismatches`, `2_gaps`, `2_query start`,
-                `2_query end`, `2_subject start`, `2_subject end`,
-                `2_bitscore`, `3_mismatches`, `3_gaps`, `3_query start`,
-                `3_query end`, `3_subject start`, `3_subject end`, 
-                `3_bitscore`))
+          curated_results_filt %>%
+          select(-c(Researcher, Project, Identification,
+                    `Identification Max. taxonomy`, Primer, `Read origin`,
+                    `Metadata 7`, `Metadata 8`, `Metadata 9`, `Metadata 10`,
+                    `Metadata 11`, `Metadata 12`,
+                    obs, `Primer expected length`, `Possible Metazoa`,
+                    `blast ID Origin`, `ID status`, `Contamination status`, 
+                    `ASV (Sequence)`, `PCR Control`, `Prop. to Ext control`,
+                    `Prop. to PCR control`, `Prop. to Filt control`, Type,
+                    `1_mismatches`, `1_gaps`, `1_query start`, 
+                    `1_query end`, `1_subject start`, `1_subject end`,
+                    `1_bitscore`, `2_mismatches`, `2_gaps`, `2_query start`,
+                    `2_query end`, `2_subject start`, `2_subject end`,
+                    `2_bitscore`, `3_mismatches`, `3_gaps`, `3_query start`,
+                    `3_query end`, `3_subject start`, `3_subject end`, 
+                    `3_bitscore`))
     ```
 
--   Recalculate abundances after filtering.
+-   **Recalculate relative abundances.** Compute new relative abundance percentages (RRA) for each ASV based on the final filtered read counts per sample and site.
 
     ```{r}
     curated_results <-
-      curated_results_rszd %>%
-      group_by(Sample) %>%
-      mutate("Sample total abundance" = sum(`ASV absolute abundance`),
-             "Relative abundance on sample" = `ASV absolute abundance`/ `Sample total abundance` * 100) %>%
-      group_by(`ASV header`, `Metadata 1`) %>% 
-      mutate("ASV site abundance" = sum(`ASV absolute abundance`)) %>% 
-      group_by(`Metadata 1`) %>% 
-      mutate("Site total abundance" = sum(`ASV site abundance`),
-             "Relative abundance on site" = `ASV site abundance`/ `Site total abundance` * 100) %>%
-      relocate(`ASV header`, `Curated ID`, Sample, 
-             `ASV absolute abundance`, `Relative abundance on sample`, `Sample total abundance`, 
-             `ASV site abundance`, `Relative abundance on site`, `Site total abundance`) %>% 
-      ungroup()
+          curated_results_rszd %>%
+          group_by(Sample) %>%
+          mutate("Sample total abundance" = sum(`ASV absolute abundance`),
+                 "Relative abundance on sample" = `ASV absolute abundance`/ `Sample total abundance` * 100) %>%
+          group_by(`ASV header`, `Metadata 1`) %>% 
+          mutate("ASV site abundance" = sum(`ASV absolute abundance`)) %>% 
+          group_by(`Metadata 1`) %>% 
+          mutate("Site total abundance" = sum(`ASV site abundance`),
+                 "Relative abundance on site" = `ASV site abundance`/ `Site total abundance` * 100) %>%
+          relocate(`ASV header`, `Curated ID`, Sample, 
+                 `ASV absolute abundance`, `Relative abundance on sample`, `Sample total abundance`, 
+                 `ASV site abundance`, `Relative abundance on site`, `Site total abundance`) %>% 
+          ungroup()
 
-    # Salvar a tabela
-    # write_csv(curated_results, 
-    #       paste0(tbl_path, "/table-filt_curated_results", "-",
-    #              Sys.Date(), ".csv", sep = ""))
+        # Export table
+        # write_csv(curated_results, 
+        #       paste0(tbl_path, "/table-filt_curated_results", "-",
+        #              Sys.Date(), ".csv", sep = ""))
 
     curated_results
     ```
 
--   Metadata inclusion.
+-   **Merge metadata.** Append environmental data (e.g., elevation, site codes) to the biological dataframe.
 
     ```{r}
     meta_data <-
@@ -592,13 +461,220 @@ Preliminary analysis of raw data without integrative curation of ASVs.
              "elevation" = c(859, 812, 800, 1006, 784, 989, 752))
     ```
 
-### Read Evolution
+#### Data Shaping (Long/Wide Formats)
 
-#### Absolute Read Evolution
-
--   Absolute number of paired-end reads generated.
+-   **Create long-format tables.** Generate a "long" dataframe suitable for `ggplot2` plotting and detailed inspection of taxon per sample.
 
     ```{r}
+    # Longer list grouped by sample
+    taxa_sample_longer <- 
+      curated_results %>%
+      select(Sample, 
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)"), 
+             `ASV header`) %>% 
+      group_by(Sample) %>% 
+      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, Sample) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              "Taxon" = `Curated ID`,
+              "Site" = `Metadata 1`,
+              Sample,
+              `Sample abundance`,
+              Reads,
+              "%" = round(Reads / `Sample abundance` * 100, 4)) %>%
+      unique() %>% 
+      print()
+
+    # Longer list grouped by site
+    taxa_site_longer <- 
+      curated_results %>%
+      select(Sample, 
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)"), 
+             `ASV header`) %>% 
+      group_by(`Metadata 1`) %>% 
+      mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, `Metadata 1`) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              "Taxon" = `Curated ID`,
+              "Site" = `Metadata 1`,
+              `Site abundance`,
+              Reads,
+              "%" = round(Reads / `Site abundance` * 100, 2)) %>%
+      unique() %>% 
+      print()
+    ```
+
+-   **Create wide-format matrices.** Generate a "site x species" matrix suitable for community analysis packages like `vegan` and `phyloseq`.
+
+    ```{r}
+    # Wider list grouped by sample (useful for detailed per-sample analysis)
+    sample_taxa_wider <- 
+    curated_results %>%
+      select(Sample, 
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)")) %>% 
+      group_by(Sample) %>% 
+      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, Sample) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Ordem" = `Order (Curated ID)`,
+              "Familia" = `Family (Curated ID)`,
+              "Genero" = `Genus (Curated ID)`,
+              "Amostra" = Sample,
+              "Local" = `Metadata 1`,
+              "Taxon" = `Curated ID`,
+              Reads,
+              "%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
+      unique() %>% 
+      pivot_wider(id_cols = c(Local, Amostra),
+                 names_from = Taxon,
+                 values_from = Reads) %>% 
+      mutate(across(c(3:ncol(.)), ~ replace_na(., 0))) %>% 
+      print()
+
+    # Wider list grouped by site (the primary matrix for vegan/phyloseq community analysis)
+    site_taxa_wider <- 
+    curated_results %>%
+      select(`ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)")) %>% 
+      group_by(`Metadata 1`) %>% 
+      mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, `Metadata 1`) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              "Site" = `Metadata 1`,
+              "Taxon" = `Curated ID`,
+              Reads,
+              "%" = round(Reads / `Site abundance` * 100, 2)) %>% 
+      unique() %>% 
+      pivot_wider(id_cols = c(Site),
+                 names_from = Taxon,
+                 values_from = Reads) %>% 
+      mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+      print()
+    ```
+
+## 3. Data Processing: Traditional Survey
+
+### Import & Taxonomy Retrieval
+
+-   **Load traditional survey data.** Import the species list and abundance data from electrofishing/netting surveys.
+
+    ```{r}
+    traditional_results_raw <-
+      read.csv(paste0(data_path, "/coleta_tradicional-eDNA_cipo-171125.csv"),
+               sep = ",",
+               check.names = FALSE) %>%
+      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>%
+      as_tibble()
+    ```
+
+-   **Review taxonomy.** Ensure species names in the traditional dataset match the nomenclature used in the eDNA dataset to allow direct comparison.
+
+    ```{r}
+    # Retrieve curated genera
+    traditional_results <-
+      traditional_results_raw %>%
+      mutate("Genus" = word(Taxon, 1)) %>%
+      relocate(Taxon, Genus)
+
+    # Retrieve taxIDs
+    taxids <- retrieve_taxid(traditional_results$Genus)
+
+    # Retrieve complete taxonomy
+    curated_taxonomy <- retrieve_taxonomy(taxids)
+
+    # Select only necessary information
+    curated_taxonomy_rdx <-
+      curated_taxonomy %>%
+      filter(class == "Actinopteri") %>%
+      select(order, family, genus) %>%
+      reframe("Order" = order,
+              "Family" = family,
+              "Genus" = genus) %>%
+      na.omit()
+
+    # Join curated taxonomy with original data
+    traditional_results <-
+      traditional_results %>%
+      left_join(curated_taxonomy_rdx,
+                by = join_by(Genus)) %>%
+      relocate(Order, Family, Genus, Taxon)
+    ```
+
+### Data Shaping (Long/Wide Formats)
+
+-   **Create long-format tables.** Generate a "long" dataframe suitable for pivoting to wider format and merging with eDNA metabarcoding data.
+
+```{r}
+traditional_longer <-
+traditional_results %>% 
+  pivot_longer(cols = c("SC1", "SC2", "SC3", 
+                        "SC4", "SC6", "SC7"),
+               names_to = "Site",
+               values_to = "Ocurrence") %>% 
+  filter(!is.na(Ocurrence)) %>% 
+  mutate(Method = "Traditional")
+```
+
+-   **Create wide-format matrices.** Generate a "site x species" matrix suitable for community analysis packages like `vegan` and `phyloseq`.
+
+```{r}
+# Wider list grouped by site
+traditional_wider <- 
+traditional_longer %>%
+  pivot_wider(id_cols = c(Site),
+              names_from = Taxon,
+              values_from = Ocurrence) %>% 
+  mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+  print()
+```
+
+### Dataset Merging: eDNA + Traditional
+
+-   **Merge datasets.** Combine eDNA and traditional survey tables into a single `merged_methods` object, adding a "Method" column to distinguish sources.
+
+    ```{r}
+    #Longer format
+    merged_methods_longer <- 
+      taxa_site_longer %>% 
+      select(-c(`Site abundance`, `%`)) %>% 
+      rename(Reads = "Ocurrence") %>% 
+      mutate(Method = "Metabarcoding") %>% 
+      bind_rows(traditional_longer) %>% 
+      print()
+    ```
+
+## 4. Descriptive Statistics & Sequencing QC
+
+### Read Evolution (Tracking & Attrition)
+
+-   **Track read counts.** Calculate the total number of reads surviving each step of the pipeline (Raw $\to$ Pre-filter $\to$ Curated).
+
+    ```{r}
+    # Import raw read counts
     seq_read_counts <- 
       read.csv("/home/gabriel/projetos/eDNA_cipo/data/reads_n_seq_counts_eDNA_cipo.csv",
                sep = ",",
@@ -606,11 +682,8 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       as_tibble() %>% 
       summarise("Total reads" = sum(`Raw reads (pairs)`)) %>% 
       print()
-    ```
 
--   Quantification of reads surviving the pipeline.
-
-    ```{r}
+    # Reads surviving raw pipeline
     raw_resume <-
       raw_pre_results %>% 
       reframe("Total reads" = sum(`ASV absolute abundance`),
@@ -618,49 +691,38 @@ Preliminary analysis of raw data without integrative curation of ASVs.
               ) %>% 
       unique() %>% 
       print()
-    ```
 
--   Quantification of reads surviving preliminary filtering.
-
-    ```{r}
+    # Reads surviving pre-filtering
     raw_resume_pre_filt <- 
       pre_results_filt %>% 
       reframe("Total reads" = sum(`ASV absolute abundance`),
               "ASVs" = n_distinct(`ASV header`)) %>% 
       unique() %>% 
       print()
-    ```
 
--   Quantification of reads surviving integrative curation.
-
-    ```{r}
+    # Reads surviving curation
     curated_resume <-
       curated_results_filt %>% 
       reframe("Reads totais" = sum(`ASV absolute abundance`),
               "ASVs" = n_distinct(`ASV header`)) %>% 
       unique() %>% 
       print()
-    ```
 
--   Summary of reads evolution through the pipeline
-
-    ```{r}
+    # Summary table
     summary_reads <- tibble(
       Stage = c("Sequencing", "Raw pipeline", "Pre-filter", "Curated"),
       Total = c(seq_read_counts$`Total reads`,
-                sum(raw_resume_sample$`Reads totais`),
-                sum(raw_resume_pre_filt_sample$`Reads totais`),
-                sum(curated_resume_sample$`Reads totais`)))
-
-    print(summary_reads)
+                sum(raw_resume$`Total reads`),
+                sum(raw_resume_pre_filt$`Total reads`),
+                sum(curated_resume$`Reads totais`))) %>% 
+    print()
     ```
 
-#### Read Evolution per Sample
-
--   Number of paired-end reads generated per sample.
+-   **Summarize sample-level attrition.** Generate a table showing read loss per individual sample to identify potentially failed libraries.
 
     ```{r}
-    seq_read_counts <- 
+    # Raw reads per sample
+    seq_read_counts_sample <- 
       read.csv("/home/gabriel/projetos/eDNA_cipo/data/reads_n_seq_counts_eDNA_cipo.csv",
                sep = ",",
                check.names = FALSE) %>%
@@ -668,120 +730,38 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       group_by(Sample) %>% 
       reframe("Total reads" = sum(`Raw reads (pairs)`)) %>% 
       print()
-    ```
 
--   Quantification of reads per sample surviving the pipeline.
-
-    ```{r}
+    # Reads per sample after pipeline
     raw_resume_sample <-
       raw_pre_results  %>%
-      group_by(`Metadata 1`) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(Sample) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>%
       group_by(Sample) %>%
-      mutate("Reads totais" = sum(`ASV absolute abundance`)) %>%
-      group_by(Sample) %>%
-      reframe("Local" = `Metadata 1`,
-              Sample,
-              `Reads totais`,
-              # `%`,
-              # "ASVs" = n_distinct(`ASV header`),
-              # "OTUs" = n_distinct(OTU),
-              # "Class" = `Class (NCBI)`,
-              # "Order" = `Order (NCBI)`,
-              # "Family" = `Family (NCBI)`,
-              # "Genus" = `Genus (NCBI)`,
-              # "Final ID (BLASTn)" = `Final ID (BLASTn)`
-              ) %>%
-      unique() %>% 
-      print(n = 23)
-    ```
+      reframe("Reads_Pipeline" = sum(`ASV absolute abundance`))
 
--   Quantification of reads per sample surviving preliminary filtering.
-
-    ```{r}
+    # Reads per sample after pre-filter
     raw_resume_pre_filt_sample <-
       pre_results_filt  %>%
-      group_by(`Metadata 1`) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(Sample) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>%
       group_by(Sample) %>%
-      mutate("Reads totais" = sum(`ASV absolute abundance`)) %>%
-      group_by(Sample) %>%
-      reframe("Local" = `Metadata 1`,
-              Sample,
-              `Reads totais`,
-              # `%`,
-              # "ASVs" = n_distinct(`ASV header`),
-              # "OTUs" = n_distinct(OTU),
-              # "Class" = `Class (NCBI)`,
-              # "Order" = `Order (NCBI)`,
-              # "Family" = `Family (NCBI)`,
-              # "Genus" = `Genus (NCBI)`,
-              # "Final ID (BLASTn)" = `Final ID (BLASTn)`
-              ) %>%
-      unique() %>% 
-      print()
-    ```
+      reframe("Reads_PreFilter" = sum(`ASV absolute abundance`))
 
--   Quantification of reads per sample surviving integrative curation.
-
-    ```{r}
+    # Reads per sample after curation
     curated_resume_sample <-
       curated_results_filt  %>%
-      group_by(`Metadata 1`) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(Sample) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>%
       group_by(Sample) %>%
-      mutate("Reads totais" = sum(`ASV absolute abundance`)) %>%
-      group_by(Sample) %>%
-      reframe("Local" = `Metadata 1`,
-              Sample,
-              `Reads totais`,
-              # `%`,
-              # "ASVs" = n_distinct(`ASV header`),
-              # "OTUs" = n_distinct(OTU),
-              # "Class" = `Class (NCBI)`,
-              # "Order" = `Order (NCBI)`,
-              # "Family" = `Family (NCBI)`,
-              # "Genus" = `Genus (NCBI)`,
-              # "Final ID (BLASTn)" = `Final ID (BLASTn)`
-              ) %>%
-      unique() %>% 
-      print()
-    ```
+      reframe("Reads_Curated" = sum(`ASV absolute abundance`))
 
--   Summary of reads evolution per sample through the pipeline
-
-    ```{r}
+    # Joined summary table
     summary_reads_sample <-
-      seq_read_counts %>%
-      rename(`Total reads` = "Raw_Reads") %>%
-      left_join(raw_resume_sample %>%
-                  rename_with(~paste0("After_Pipeline_", .), -c(Local, Sample)),
-                by = "Sample") %>%
-      left_join(raw_resume_pre_filt_sample %>%
-                  rename_with(~paste0("After_Pre_Filter_", .), -c(Local, Sample)),
-                by = "Sample") %>%
-      left_join(curated_resume_sample %>%
-                  rename_with(~paste0("After_Curation_", .), -c(Local, Sample)),
-                by = "Sample") %>%
-      select(-c(Local.x, Local.y, Local)) %>%
+      seq_read_counts_sample %>%
+      rename(`Total reads`= "Raw_Reads") %>%
+      left_join(raw_resume_sample, by = "Sample") %>%
+      left_join(raw_resume_pre_filt_sample, by = "Sample") %>%
+      left_join(curated_resume_sample, by = "Sample") %>%
       print()
     ```
 
-### Removed Data Analysis
+### Excluded Identifications
 
--   Summary of removed data. Displays sequence abundance by taxonomic class in each site
+-   **Summary of removed data.** Displays sequence abundance by taxonomic class in each site
 
     ```{r}
     # Removed ASVs from the curated dataset
@@ -835,19 +815,19 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       pivot_wider(id_cols = Local,
               names_from = Classe,
               values_from = `%`) %>% 
-      relocate("Local", 
-           "Actinopteri", 
-           "Amphibia", 
-           "Aves", 
-           "Mammalia",
-           "Alphaproteobacteria", 
-           "Betaproteobacteria", 
-           "Terriglobia",
-           "NA") %>% 
+      relocate("Local",
+               "Actinopteri",
+               "Amphibia",
+               "Aves",
+               "Mammalia",
+               "Alphaproteobacteria",
+               "Betaproteobacteria",
+               "Terriglobia",
+               "NA") %>% 
       print()
     ```
 
--   Tile plot of removed data.
+-   **Visualize identifications removed from dataset.** Create a tile plot showing the relative abundance (log scale) of each identification removed from the final dataset.
 
     ```{r}
     # Define factor Locals for plot
@@ -923,14 +903,15 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     tile_plot_diff
     ```
 
--   Table of reasons for sequence removal.
+-   **Tabulate removal reasons.** Create a summary table listing why specific ASVs were discarded (e.g., "Sequence length outliers", "Control contamination").
 
     ```{r}
     # Calculate total abundance per site
     sample_abd <-
       raw_curated_results %>%
       group_by(`Metadata 1`) %>%
-      summarize(total_abundance = sum(`ASV absolute abundance`, na.rm = TRUE)) %>% 
+      summarize(total_abundance = sum(`ASV absolute abundance`, 
+                                      na.rm = TRUE)) %>% 
       print()
 
     motiv_data_diff <-
@@ -979,38 +960,17 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
 
     # Export table 
-    write.csv(motiv_data_diff,
-              paste0(tbl_path, "/motiv_data_removed", "-",
-                     Sys.Date(), ".csv", sep = ""))
+    # write.csv(motiv_data_diff,
+    #           paste0(tbl_path, "/motiv_data_removed", "-",
+    #                  Sys.Date(), ".csv", sep = ""))
     ```
 
-### Post-curation Metrics
+### Taxonomic Coverage Summary
 
--   Total reads, ASVs, Orders, Families, Genera, Species, and Non-species post-curation per *sample*.
-
-    ```{r}
-    sample_stats <-
-      curated_results %>%
-      filter(`Class (NCBI)` == "Actinopteri") %>% 
-      group_by(Sample) %>%
-      reframe("Amostra" = Sample,
-              "Reads totais" = sum(`ASV absolute abundance`),
-              "ASVs" = n_distinct(`ASV header`),
-              "OTUs" = n_distinct(OTU),
-              "Ordem" = n_distinct(`Order (Curated ID)`),
-              "Familias" = n_distinct(`Family (Curated ID)`),
-              "Generos" = n_distinct(`Genus (Curated ID)`),
-              "Especies" = n_distinct(`Curated ID`[grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) 
-                                                     & !grepl("sp\\.", `Curated ID`)]),
-              "N-Especies" = n_distinct(`Curated ID`) - Especies ) %>%
-      select(-c(Sample)) %>% 
-      unique() %>% 
-      print()
-    ```
-
--   Total reads, ASVs, Orders, Families, Genera, Species, and Non-species post-curation per *site*.
+-   **Calculate taxonomic metrics.** Count the total number of unique Orders, Families, Genera, and Species identified in the final dataset.
 
     ```{r}
+    # Metrics per Site
     site_stats <-
       curated_results %>%
       filter(`Class (NCBI)` == "Actinopteri") %>% 
@@ -1028,11 +988,8 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       select(-c(`Metadata 1`)) %>% 
       unique() %>% 
       print()
-    ```
 
--   Total reads, ASVs, Orders, Families, Genera, Species, and Non-species post-curation per *Order*.
-
-    ```{r}
+    # Metrics per Order
     order_stats <-
       curated_results %>%
       filter(`Class (NCBI)` == "Actinopteri") %>% 
@@ -1049,40 +1006,68 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       select(-c(`Order (Curated ID)`)) %>% 
       unique() %>% 
       print()
-
-    # Export table
-    # write.csv(order_stats,
-    #           paste0(tbl_path, "/order_stats", "-",
-    #                  Sys.Date(), ".csv", sep = ""))
     ```
 
--   Total reads, ASVs, Orders, Families, Genera, Species, and Non-species post-curation per *Family*.
+-   **Tabulate taxon counts.** Generate summary tables of species richness per Site and per Family.
 
     ```{r}
-    family_stats <-
+    # Per Site
+    site_stats <-
       curated_results %>%
-      filter(`Class (NCBI)` == "Actinopteri") %>% 
-      group_by(`Family (Curated ID)`) %>%
-      reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Curated ID)`,
-              "Reads totais" = sum(`ASV absolute abundance`),
-              "ASVs" = n_distinct(`ASV header`),
-              "OTUs" = n_distinct(OTU),
-              "Generos" = n_distinct(`Genus (Curated ID)`),
-              "Especies" = n_distinct(`Curated ID`[grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) 
-                                                     & !grepl("sp\\.", `Curated ID`)]),
-              "N-Especies" = n_distinct(`Curated ID`) - Especies ) %>%
-      select(-c(`Family (Curated ID)`)) %>% 
+      filter(`Class (NCBI)` == "Actinopteri") %>%
+      group_by(`Metadata 1`) %>%
+      reframe(
+        "Local"       = `Metadata 1`,
+        "Reads totais"= sum(`ASV absolute abundance`),
+        "ASVs"        = n_distinct(`ASV header`),
+        "OTUs"        = n_distinct(OTU),
+        "Ordem"       = n_distinct(`Order (Curated ID)`),
+        "Familias"    = n_distinct(`Family (Curated ID)`),
+        "Generos"     = n_distinct(`Genus (Curated ID)`),
+        "Especies"    = n_distinct(`Curated ID`[
+                            grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) &
+                            !grepl("sp\\.", `Curated ID`)
+                          ]),
+        "N-Especies"  = n_distinct(`Curated ID`) - Especies
+      ) %>%
+      select(-`Metadata 1`) %>%
       unique() %>%
       print()
 
     # Export table
-    # write.csv(family_stats,
-    #           paste0(tbl_path, "/family_stats", "-",
-    #                  Sys.Date(), ".csv", sep = ""))
+    # write.csv(site_stats,   
+    # paste0(tbl_path, "/site_stats-",   Sys.Date(), ".csv"))
+
+    # Per Family
+    family_stats <-
+      curated_results %>%
+      filter(`Class (NCBI)` == "Actinopteri") %>%
+      group_by(`Family (Curated ID)`) %>%
+      reframe(
+        "Ordem"       = `Order (Curated ID)`,
+        "Familia"     = `Family (Curated ID)`,
+        "Reads totais"= sum(`ASV absolute abundance`),
+        "ASVs"        = n_distinct(`ASV header`),
+        "OTUs"        = n_distinct(OTU),
+        "Generos"     = n_distinct(`Genus (Curated ID)`),
+        "Especies"    = n_distinct(`Curated ID`[
+                            grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) &
+                            !grepl("sp\\.", `Curated ID`)
+                          ]),
+        "N-Especies"  = n_distinct(`Curated ID`) - Especies
+      ) %>%
+      select(-`Family (Curated ID)`) %>%
+      unique() %>%
+      print()
+
+    # Export table
+    # write.csv(family_stats, 
+    # paste0(tbl_path, "/family_stats-", Sys.Date(), ".csv"))
     ```
 
--   List identifications at each taxonomic level after curation.
+### Final Species Checklists
+
+-   **Classify identification levels.** Categorize identifications into Species-level, Genus-level (*sp.*), and tentative (*cf./ aff.*) for the final report.
 
     ```{r}
     # Species level
@@ -1101,7 +1086,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
     aff_ids <-
       curated_results$`Curated ID` %>%
       unique() %>%
-      setdiff(c(spp_Local, nspp_Local))
+      setdiff(c(spp_site, nspp_site))
 
     # Combine all into one data frame
     spp_tax_levels <-
@@ -1112,14 +1097,9 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       tidyr::unnest_longer(taxa) %>%
       dplyr::rename(taxon = taxa) %>% 
       print()
-
-    # Export table
-    # write.csv(spp_tax_levels,
-    #           paste0(tbl_path, "/spp_tax_levels", "-",
-    #                  Sys.Date(), ".csv", sep = ""))
     ```
 
--   Singleton Identification
+-   **Identify singletons.** List species represented by only a single ASV or found in only one sample (potential false positives).
 
     ```{r}
     # Singleton occurrences per sample.
@@ -1153,537 +1133,11 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       print()
     ```
 
-### Preliminary Tables
+## 5. Ecological Analysis: Community Composition
 
--   Create summary tables comparing identifications before and after curation and abundances by location/sample.
+### Compositional Bar Plots
 
-    ```{r}
-    # Creating a table to use to evaluate the curated data
-
-    # Longer summary table
-    dt_all_resume <- 
-      curated_results %>% 
-      group_by(Sample) %>%
-      mutate("Abd total" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Curated ID`) %>%
-      mutate("Abundancia total" = sum(`ASV absolute abundance`)) %>% 
-      group_by(`Curated ID`, `Final ID (BLASTn)`) %>% 
-      mutate("Reads totais" = sum(`ASV absolute abundance`)) %>% 
-      group_by(Sample, `Curated ID`, `Final ID (BLASTn)`) %>% 
-      reframe("Ponto Locall" = `Metadata 1`,
-              "Local" = Sample,
-              "Replicata" = `Metadata 2`,
-              "ID Curada" = `Curated ID`,
-              "ID BLASTn" = `Final ID (BLASTn)`,
-              "Reads totais" = `Reads totais`,
-              "Abundancia total" = `Abundancia total`,
-              "%" = sum(`Relative abundance on sample`),
-              "ASVs" = n_distinct(`ASV header`),
-              "OTUs" = n_distinct(OTU),
-              "Reads" = sum(`ASV absolute abundance`),
-              "Classe" = `Class (NCBI)`,
-              "Ordem" = `Order (NCBI)`,
-              "Familia" = `Family (NCBI)`,
-              "Genero" = `Genus (NCBI)`) %>%
-      unique() 
-
-    # Wider table to evaluate curated data
-    wider_dt_all_resume <-
-      dt_all_resume %>% 
-      mutate(`%` = round(`%`,digits = 4)) %>% 
-      pivot_wider(id_cols = c("Classe","ID Curada", "ID BLASTn", 
-                              "Reads totais", "Abundancia total"),
-                  names_from = Local,
-                  values_from =  c("%","ASVs","OTUs","Reads"),
-                  names_glue = "{Local}_{.value}") %>%
-      select(sort(colnames(.))) %>% 
-      relocate(Classe, `ID Curada`, `ID BLASTn`, `Reads totais`, `Abundancia total`,
-               "SC1A_Reads", "SC1A_ASVs", "SC1A_OTUs", "SC1A_%",
-               "SC1B_Reads", "SC1B_ASVs", "SC1B_OTUs", "SC1B_%",
-               "SC1C_Reads", "SC1C_ASVs", "SC1C_OTUs", "SC1C_%",
-               "SC2A_Reads", "SC2A_ASVs", "SC2A_OTUs", "SC2A_%",
-               "SC2B_Reads", "SC2B_ASVs", "SC2B_OTUs", "SC2B_%",
-               "SC2C_Reads", "SC2C_ASVs", "SC2C_OTUs", "SC2C_%",
-               "SC3A_Reads", "SC3A_ASVs", "SC3A_OTUs", "SC3A_%",
-               "SC3B_Reads", "SC3B_ASVs", "SC3B_OTUs", "SC3B_%",
-               "SC3C_Reads", "SC3C_ASVs", "SC3C_OTUs", "SC3C_%",
-               "SC4A_Reads", "SC4A_ASVs", "SC4A_OTUs", "SC4A_%",
-               "SC4B_Reads", "SC4B_ASVs", "SC4B_OTUs", "SC4B_%",
-               "SC4C_Reads", "SC4C_ASVs", "SC4C_OTUs", "SC4C_%",
-               "SC5A_Reads", "SC5A_ASVs", "SC5A_OTUs", "SC5A_%",
-               "SC5B_Reads", "SC5B_ASVs", "SC5B_OTUs", "SC5B_%",
-               "SC5C_Reads", "SC5C_ASVs", "SC5C_OTUs", "SC5C_%",
-               "SC6A_Reads", "SC6A_ASVs", "SC6A_OTUs", "SC6A_%",
-               "SC6B_Reads", "SC6B_ASVs", "SC6B_OTUs", "SC6B_%",
-               "SC6C_Reads", "SC6C_ASVs", "SC6C_OTUs", "SC6C_%",
-               "SC7A_Reads", "SC7A_ASVs", "SC7A_OTUs", "SC7A_%",
-               "SC7B_Reads", "SC7B_ASVs", "SC7B_OTUs", "SC7B_%",
-               "SC7C_Reads", "SC7C_ASVs", "SC7C_OTUs", "SC7C_%")
-
-    # Export table
-    # write_xlsx(wider_dt_all_resume,
-    #            paste0(tbl_path, "/wider_dt_all_resume", "-",
-    #                  Sys.Date(), ".xlsx", sep = ""))
-
-    wider_dt_all_resume
-    ```
-
--   Wider table of abundances by site/point for each identification.
-
-    ```{r}
-    # Longer summary table
-    dt_summ_resume <- 
-      curated_results %>% 
-      group_by(Sample) %>%
-      mutate("Abd total" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Curated ID`) %>%
-      mutate("Abundancia total" = sum(`ASV absolute abundance`)) %>% 
-      group_by(Sample, `Curated ID`) %>% 
-      reframe("Ponto Locall" = `Metadata 1`,
-              "Local" = Sample,
-              "Replicata" = `Metadata 2`,
-              "ID Curada" = `Curated ID`,
-              "Abundancia total" = `Abundancia total`,
-              "%" = sum(`Relative abundance on sample`),
-              "ASVs" = n_distinct(`ASV header`),
-              "OTUs" = n_distinct(OTU),
-              "Reads" = sum(`ASV absolute abundance`),
-              "Classe" = `Class (NCBI)`,
-              "Ordem" = `Order (NCBI)`,
-              "Familia" = `Family (NCBI)`,
-              "Genero" = `Genus (NCBI)`) %>%
-      unique()
-
-    # Wider table to evaluate curated data
-    wider_dt_summ_resume <-
-      dt_summ_resume %>% 
-      mutate(`%` = round(`%`,digits = 4)) %>% 
-      pivot_wider(id_cols = c("Classe","ID Curada", "Abundancia total"),
-                  names_from = Local,
-                  values_from =  c("%","ASVs","OTUs","Reads"),
-                  names_glue = "{Local}_{.value}") %>%
-      select(sort(colnames(.))) %>% 
-      relocate(Classe, `ID Curada`, `Abundancia total`,
-               "SC1A_Reads", "SC1A_ASVs", "SC1A_OTUs", "SC1A_%",
-               "SC1B_Reads", "SC1B_ASVs", "SC1B_OTUs", "SC1B_%",
-               "SC1C_Reads", "SC1C_ASVs", "SC1C_OTUs", "SC1C_%",
-               "SC2A_Reads", "SC2A_ASVs", "SC2A_OTUs", "SC2A_%",
-               "SC2B_Reads", "SC2B_ASVs", "SC2B_OTUs", "SC2B_%",
-               "SC2C_Reads", "SC2C_ASVs", "SC2C_OTUs", "SC2C_%",
-               "SC3A_Reads", "SC3A_ASVs", "SC3A_OTUs", "SC3A_%",
-               "SC3B_Reads", "SC3B_ASVs", "SC3B_OTUs", "SC3B_%",
-               "SC3C_Reads", "SC3C_ASVs", "SC3C_OTUs", "SC3C_%",
-               "SC4A_Reads", "SC4A_ASVs", "SC4A_OTUs", "SC4A_%",
-               "SC4B_Reads", "SC4B_ASVs", "SC4B_OTUs", "SC4B_%",
-               "SC4C_Reads", "SC4C_ASVs", "SC4C_OTUs", "SC4C_%",
-               "SC5A_Reads", "SC5A_ASVs", "SC5A_OTUs", "SC5A_%",
-               "SC5B_Reads", "SC5B_ASVs", "SC5B_OTUs", "SC5B_%",
-               "SC5C_Reads", "SC5C_ASVs", "SC5C_OTUs", "SC5C_%",
-               "SC6A_Reads", "SC6A_ASVs", "SC6A_OTUs", "SC6A_%",
-               "SC6B_Reads", "SC6B_ASVs", "SC6B_OTUs", "SC6B_%",
-               "SC6C_Reads", "SC6C_ASVs", "SC6C_OTUs", "SC6C_%",
-               "SC7A_Reads", "SC7A_ASVs", "SC7A_OTUs", "SC7A_%",
-               "SC7B_Reads", "SC7B_ASVs", "SC7B_OTUs", "SC7B_%",
-               "SC7C_Reads", "SC7C_ASVs", "SC7C_OTUs", "SC7C_%")
-
-    # Exporting table for the paper
-    # write_xlsx(wider_dt_summ_resume,
-    #            paste0(tbl_path, "/wider_dt_summ_resume", "-",
-    #                  Sys.Date(), ".xlsx", sep = ""))
-
-    wider_dt_summ_resume
-    ```
-
-### Final Species List
-
--   Species list in *longer* format.
-
-    ```{r}
-    # Longer list grouped by sample
-    taxa_sample_longer <- 
-      curated_results %>%
-      select(Sample, 
-             `ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             ends_with("(Curated ID)"), 
-             `ASV header`, 
-             `Sequence (ASV tip)`) %>% 
-      group_by(Sample) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Curated ID`, Sample) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate() %>% 
-      reframe("Order" = `Order (Curated ID)`,
-              "Family" = `Family (Curated ID)`,
-              "Genus" = `Genus (Curated ID)`,
-              "Taxon" = `Curated ID`,
-              "Site" = `Metadata 1`,
-              Sample,
-              `Sample abundance`,
-              Reads,
-              "%" = round(Reads / `Sample abundance` * 100, 4)) %>%
-      unique() %>%
-      print()
-
-    # Longer list grouped by site
-    taxa_site_longer <- 
-      curated_results %>%
-      select(Sample, 
-             `ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             ends_with("(Curated ID)"), 
-             `ASV header`, 
-             `Sequence (ASV tip)`) %>% 
-      group_by(`Metadata 1`) %>% 
-      mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Curated ID`, `Metadata 1`) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate() %>% 
-      reframe("Order" = `Order (Curated ID)`,
-              "Family" = `Family (Curated ID)`,
-              "Genus" = `Genus (Curated ID)`,
-              "Taxon" = `Curated ID`,
-              "Site" = `Metadata 1`,
-              `Site abundance`,
-              Reads,
-              "%" = round(Reads / `Site abundance` * 100, 2)) %>%
-      unique() %>%
-      print()
-    ```
-
--   Species list in *wider* format.
-
-    ```{r}
-    # Wider list grouped by sample
-    sample_taxa_wider <- 
-    curated_results %>%
-      select(Sample, 
-             `ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             ends_with("(Curated ID)")) %>% 
-      group_by(Sample) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Curated ID`, Sample) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Curated ID)`,
-              "Genero" = `Genus (Curated ID)`,
-              "Amostra" = Sample,
-              "Local" = `Metadata 1`,
-              "Taxon" = `Curated ID`,
-              Reads,
-              "%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
-      unique() %>% 
-      pivot_wider(id_cols = c(Local, Amostra),
-                 names_from = Taxon,
-                 values_from = Reads) %>% 
-      mutate(across(c(3:ncol(.)), ~ replace_na(., 0))) %>% 
-      print()
-
-    # Wider list grouped by site
-    site_taxa_wider <- 
-    curated_results %>%
-      select(`ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             ends_with("(Curated ID)")) %>% 
-      group_by(`Metadata 1`) %>% 
-      mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Curated ID`, `Metadata 1`) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Curated ID)`,
-              "Genero" = `Genus (Curated ID)`,
-              "Local" = `Metadata 1`,
-              "Taxon" = `Curated ID`,
-              Reads,
-              "%" = round(Reads / `Site abundance` * 100, 2)) %>% 
-      unique() %>% 
-      pivot_wider(id_cols = c(Local),
-                 names_from = Taxon,
-                 values_from = Reads) %>% 
-      mutate(across(c(3:ncol(.)), ~ replace_na(., 0))) %>% 
-      print()
-    ```
-
--   Summary species list grouped by site in *wider* format.
-
-    ```{r}
-    # Wider format list (grouped by site)
-    taxa_site_wider <-
-      curated_results %>%
-      select(Sample, 
-             `ASV absolute abundance`,
-             `Metadata 1`,
-             `Curated ID`,
-             `Final ID (BLASTn)`,
-             ends_with("(Curated ID)"), 
-             `ASV header`) %>% 
-      group_by(`Metadata 1`) %>% 
-      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
-      group_by(`Curated ID`, `Metadata 1`) %>% 
-      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
-      ungroup() %>% 
-      mutate("%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
-      reframe("Site" = `Metadata 1`,
-              "Taxon" = `Curated ID`,
-              Reads,
-              `%`) %>% 
-      unique() %>% 
-      pivot_wider(id_cols = Site,
-                 names_from = Taxon,
-                 values_from = Reads) %>%
-      mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
-      print()
-
-    # Orders for each taxon detected previously
-    ordens_f <- 
-      curated_results %>% 
-      reframe("Taxon (Curated ID)" = `Curated ID`,
-              "Ordem" = `Order (Curated ID)`) %>% 
-      unique()
-
-    # Complete species list in wider format with corresponding orders
-    order_taxa_site_wider <- 
-      taxa_site_wider %>% 
-      left_join(ordens_f,
-                by = "Taxon (Curated ID)") %>% 
-      relocate(Ordem,
-               `Taxon (Curated ID)`) %>% 
-      print()
-    ```
-
--   Taxa detected after integrative curation showing read abundance, ASVs, and OTUs.
-
-    ```{r}
-    taxa_summ <- 
-      curated_results %>%
-      group_by(`Curated ID`) %>%
-      reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Curated ID)`,
-              "Genero" = `Genus (Curated ID)`,
-              "Taxon" = `Curated ID`,
-              "Reads" = sum(`ASV absolute abundance`),
-              "ASVs" = n_distinct(`ASV header`),
-              "OTUs" = n_distinct(OTU)) %>%
-      unique() %>% 
-      select(-c(`Curated ID`)) %>% 
-      print()
-
-    # Export table
-    # write.csv(taxa_summ, paste0(tbl_path, "/taxa_summ_tbl", "-",
-    #                            Sys.Date(), ".csv", sep = ""))
-
-    taxa_summ
-    ```
-
-## Traditional Methods Data
-
-### Data retrieval
-
--   Traditional methods capture data retrieval.
-
-    ```{r}
-    traditional_results_raw <-  
-      read.csv(paste0(data_path, "/coleta_tradicional-eDNA_cipo-171125.csv"),
-               sep = ",", 
-               check.names = FALSE) %>%
-      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>% 
-      as_tibble()
-    ```
-
-### Improvements
-
--   Taxonomy retrieval for traditional methods results.
-
-    ```{r}
-    # Retrieve curated genera
-    traditional_results <-
-      traditional_results_raw %>% 
-      mutate("Genus" = word(Taxon, 1)) %>% 
-      relocate(Taxon, Genus)
-
-    # Load TaxId retrieval function
-    source("/home/gabriel/functions/retrieve_taxid.R") 
-
-    # Retrieving TaxIDs
-    taxids <- retrieve_taxid(traditional_results$Genus)
-
-    # Load taxonomy retrieval function
-    source("/home/gabriel/functions/retrieve_taxonomy.R") 
-    curated_taxonomy <- retrieve_taxonomy(taxids)
-
-    # # Select only necessary information
-    curated_taxonomy_rdx <- 
-      curated_taxonomy %>% 
-      filter(class == "Actinopteri") %>% 
-      select(order, family, genus) %>% 
-      reframe("Order" = order,
-              "Family" = family,
-              "Genus" = genus) %>% 
-      na.omit()
-
-    # Join curated taxonomy with original data
-    traditional_results_summ <- 
-      traditional_results %>% 
-      left_join(curated_taxonomy_rdx, 
-                by = join_by(Genus)) %>% 
-      relocate(Order, Family, Genus, Taxon) %>% 
-      mutate(Site = apply(across(starts_with("SC")), 1, function(x) {
-        paste(names(x)[as.logical(x) & !is.na(x)], collapse = ", ")
-        })) %>% 
-      select(-c(SC1, SC2, SC3, SC4, SC6, SC7))
-    ```
-
--   Traditional methods results with complete taxonomy in *longer table* format
-
-    ```{r}
-    traditional_longer <-
-    traditional_results %>% 
-      pivot_longer(cols = c("SC1", "SC2", "SC3", 
-                            "SC4", "SC6", "SC7"),
-                   names_to = "Site",
-                   values_to = "Ocurrence") %>% 
-      filter(!is.na(Ocurrence)) %>% 
-      mutate(Method = "Traditional")
-    ```
-
--   Traditional methods results with complete taxonomy in *wider table* format.
-
-```{{r}}
-# Wider list grouped by site
-traditional_wider <- 
-traditional_longer %>%
-  pivot_wider(id_cols = c(Site),
-              names_from = Taxon,
-              values_from = Ocurrence) %>% 
-  mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
-  print()
-```
-
--   Absence/Presence table
-
-    ```{r}
-    merged_methods_longer_pa <-  
-      merged_methods_longer %>%
-      select(-c(Order, Family, Genus)) %>%
-      mutate(Presence = "Present",
-             Taxon = factor(Taxon,
-                            levels = rev(spp_levels))) %>%
-      # group_by(Site, Family) %>%
-      complete(Taxon,
-               Method,
-               Site,
-               fill = list(Presence = "Absent")) %>%
-      ungroup() %>%
-      left_join(merged_methods_longer %>%
-                  select(Family, Taxon),
-                by = "Taxon") %>%
-      unique()
-    ```
-
-## Ecological analysis
-
-### Housekeeping
-
-This first section provides core analytical functions and sets color palettes for downstream analyses.
-
--   Custom function to sum unique values, necessary for data pivoting.
-
-    ```{r}
-    # Function to handle character and numeric vectors when pivoting
-    sum_uniq <- function(vec) {
-      if (is.character(vec)) {
-        suniq <- BiocGenerics::unique(vec)
-      }
-      if (is.numeric(vec)) {
-        suniq <- sum(vec)
-      }
-      return(suniq)
-    }
-    ```
-
--   Custom function to convert abundances to binary data
-
-    ```{r}
-    # Binary function (presence/absence)
-    jaccarize <- function(x) {
-      ifelse(x == 0, 0, 1)
-      }
-    ```
-
--   Assign colors for each sampling site and one for all.
-
-    ```{r}
-    # Color palettes for each site 
-    site_colors <- c("SC1" = "#67322EFF", "SC2" = "#9C593EFF", "SC3" = "#DDA569FF", 
-                     "SC4" = "#3F4330FF", "SC5" = "#2C6B67FF", "SC6" = "#2A4866FF", 
-                     "SC7" = "#6592B0FF")
-
-    # Color palette for overall sample
-    all_colors <- c("#175449FF")
-    ```
-
--   Assign colors for each sampling method.
-
-    ```{r}
-    method_colors <- c("eDNA" = "#c4dfff", 
-                       "Tradicional" = "#99d09e")
-    ```
-
--   Create palletes.
-
-    ```{r}
-    colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF",
-                         "#2C6B67FF","#2A4866FF","#6592B0FF"))
-
-    palette_function <- colorRampPalette(colors_base)
-
-    palette_full <- palette_function(200)
-
-    # 50 colors
-    index_colors_50 <- seq(1, 200, length.out = 50)
-
-    palette_50 <- palette_full[index_colors_50]
-
-    # 20 colors
-    index_colors_20 <- seq(1, 200, length.out = 20)
-
-    palette_20 <- palette_full[index_colors_20]
-
-    # 20 colors
-    index_colors_20 <- seq(1, 200, length.out = 20)
-
-    palette_20 <- palette_full[index_colors_20]
-
-    # 5 colors
-    index_colors_5 <- seq(1, 200, length.out = 5)
-
-    palette_5 <- palette_full[index_colors_5]
-    ```
-
--   Merge eDNA metabarcoding and Traditional Methods data.
-
-    ```{r}
-    #Longer format
-    merged_methods_longer <- 
-      taxa_site_longer %>% 
-      select(-c(`Site abundance`, `%`)) %>% 
-      rename(Reads = "Ocurrence") %>% 
-      mutate(Method = "Metabarcoding") %>% 
-      bind_rows(traditional_longer)
-    ```
-
-### Bar plots
-
--   eDNA metabarcoding and Traditional Methods data orders and families evolution through sampling sites.
+-   **Plot relative abundance.** Generate stacked bar plots showing the taxonomic composition (Order/Family) of each site for each method.
 
     ```{r}
     merged_methods_longer %>%
@@ -1708,11 +1162,11 @@ This first section provides core analytical functions and sets color palettes fo
     #            scales = "free_x")
     ```
 
-### Tile plots
+### Heatmaps (Tile Plots)
 
-#### eDNA Metabarcoding
+#### eDNA Occurrence
 
--   Tile plot for species analysis per sample.
+-   **Visualize species distribution for sample.** Create a tile plot showing the relative abundance (log scale) of each species.
 
     ```{r}
     # Define factor Locals for plot
@@ -1725,15 +1179,15 @@ This first section provides core analytical functions and sets color palettes fo
       mutate(Taxon = factor(Taxon,
                             levels = rev(spp_levels))) %>%  
       ggplot(aes(y = Taxon,
-                 x = Amostra,
+                 x = Sample,
                  fill = `%`)) +
       geom_tile() +
-      facet_grid(cols = vars(Local),
-                 rows = vars(Familia),
+      facet_grid(cols = vars(Site),
+                 rows = vars(Family),
                  space = "free",
                  scales = "free",
                  drop = TRUE) +
-      scale_fill_gradient(name = "%",
+      scale_fill_gradientn(name = "%",
                           colours = rev(c("#30123BFF",
                                           "#4662D7FF",
                                           "darkgreen",
@@ -1767,10 +1221,8 @@ This first section provides core analytical functions and sets color palettes fo
                                         face = "bold"),
             legend.position = "right",
             legend.key.height = unit(3, "cm"),
-            axis.title.x = element_text(size = 16,
-                                        face = "bold"),
-            axis.title.y = element_text(size = 16,
-                                        face = "bold")) +
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
       labs(fill = "%",
            x = "Replicatas",
            y = "Taxa")
@@ -1787,7 +1239,7 @@ This first section provides core analytical functions and sets color palettes fo
     tile_plot_sample
     ```
 
--   Tile plot for species analysis per site.
+-   **Visualize species distribution for sampling site.** Create a tile plot showing the relative abundance (log scale) of each species across all sampling sites
 
     ```{r}
     # Define factor Locals for plot
@@ -1838,41 +1290,43 @@ This first section provides core analytical functions and sets color palettes fo
                                         face = "bold"),
             legend.position = "right",
             legend.key.height = unit(3, "cm"),
-            axis.title.x = element_text(size = 16,
-                                        face = "bold"),
-            axis.title.y = element_text(size = 16,
-                                        face = "bold")) +
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
       labs(fill = "%",
            x = "Ponto amostral",
            y = "Taxa")
 
     # Export plot
-    ggsave(plot = tile_plot_site,
-           filename = paste0(figs_path, "/tile_plot_site", "_",
-                             Sys.Date(), ".png"),
-           units = "cm",
-           height = 35,
-           width = 25,
-           dpi = 600)
+    # ggsave(plot = tile_plot_site,
+    #        filename = paste0(figs_path, "/tile_plot_site", "_",
+    #                          Sys.Date(), ".png"),
+    #        units = "cm",
+    #        height = 35,
+    #        width = 25,
+    #        dpi = 600)
 
     tile_plot_site
     ```
 
-#### Metabarcoding versus Traditional Methods
+#### Method Comparison (eDNA vs Traditional)
 
--   **Tile Plot: by methods.** Species comparation per site.
+-   **Compare detection methods.** Generate a comparative heatmap contrasting species detected by eDNA versus traditional methods side-by-side.
 
     ```{r}
     # Define factor Locals for plot
     spp_levels <- 
       sort(unique(merged_methods_longer$Taxon))
-
+    
+    # Create new Site colled Resumo
+    merged_methods_summary <-
+    merged_methods_longer %>% 
+      mutate(Site = "Resumo")
+    
     # Plot
     tile_plot_methods <-
     merged_methods_longer %>%
       filter(Site != "SC5") %>% 
-      mutate(Site = "Resumo") %>% 
-      dplyr::bind_rows(data_sem_5) %>% 
+      dplyr::bind_rows(merged_methods_summary) %>%
       mutate(Taxon = factor(Taxon,
                             levels = rev(spp_levels)),
              Method = ifelse(Method == "Metabarcoding",
@@ -1903,32 +1357,31 @@ This first section provides core analytical functions and sets color palettes fo
                                         face = "bold"),
             legend.position = "none",
             legend.key.height = unit(3, "cm"),
-            axis.title.x = element_text(size = 16,
-                                        face = "bold"),
-            axis.title.y = element_text(size = 16,
-                                        face = "bold")) +
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
       labs(x = "Método",
            y = "Taxa")
 
     # Export plot
-    ggsave(plot = tile_plot_methods,
-           filename = paste0(figs_path, "/tile_plot_methods", "_",
-                             Sys.Date(), ".png"),
-           units = "cm",
-           height = 50,
-           width = 35,
-           dpi = 600)
+    # ggsave(plot = tile_plot_methods,
+    #        filename = paste0(figs_path, "/tile_plot_methods", "_",
+    #                          Sys.Date(), ".png"),
+    #        units = "cm",
+    #        height = 50,
+    #        width = 35,
+    #        dpi = 600)
 
     tile_plot_methods
     ```
 
-### Venn Diagram
+### Set Analysis (Venn Diagrams)
 
--   This section prepares data to identify common and exclusive species between different monitoring methods and sampling sites. The resulting tables will be used to create Venn diagrams.
+-   **Calculate overlaps.** Use Venn diagrams or UpSet plots to show species shared between methods and unique to each approach.
 
     ```{r}
     # Common species between eDNA and Traditional Methods
-    spp_comm <- merged_methods_longer %>%
+    spp_comm <- 
+      merged_methods_longer %>%
       group_by(Taxon) %>%
       summarise(n_Level = n_distinct(Method)) %>%
       filter(n_Level >= 2) %>%
@@ -1937,7 +1390,8 @@ This first section provides core analytical functions and sets color palettes fo
     spp_comm
         
     # Exclusive species to eDNA and Traditional Methods
-    spp_diff <- merged_methods_longer %>%
+    spp_diff <- 
+      merged_methods_longer %>%
       group_by(Taxon) %>%
       summarise(eDNA_count = sum(as.integer(Method == "Metabarcoding")),
                 Traditional_count = sum(as.integer(Method == "Traditional")),
@@ -1948,7 +1402,8 @@ This first section provides core analytical functions and sets color palettes fo
     spp_diff
 
     # Common species across all sites
-    spp_comm_sites <- merged_methods_longer %>%
+    spp_comm_sites <-
+      merged_methods_longer %>%
       group_by(Taxon) %>%
       summarise(n_Sites = n_distinct(Site)) %>%
       filter(n_Sites == 4) %>%
@@ -1957,59 +1412,60 @@ This first section provides core analytical functions and sets color palettes fo
     spp_comm_sites
         
     # Exclusive species to each sample site
-    spp_diff_sites <- resume_venn %>%
+    spp_diff_sites <- 
+      merged_methods_longer %>%
       group_by(Taxon) %>%
       summarise(SC1_count = sum(as.integer(Site == "SC1")),
-          SC2_count = sum(as.integer(Site == "SC2")),
-          SC3_count = sum(as.integer(Site == "SC3")),
-          SC4_count = sum(as.integer(Site == "SC4")),
-          SC5_count = sum(as.integer(Site == "SC5")),
-          SC6_count = sum(as.integer(Site == "SC6")),
-          SC7_count = sum(as.integer(Site == "SC7")),
-          SC1_only = SC1_count >= 1 & SC2_count == 0 & 
+                SC2_count = sum(as.integer(Site == "SC2")),
+                SC3_count = sum(as.integer(Site == "SC3")),
+                SC4_count = sum(as.integer(Site == "SC4")),
+                SC5_count = sum(as.integer(Site == "SC5")),
+                SC6_count = sum(as.integer(Site == "SC6")),
+                SC7_count = sum(as.integer(Site == "SC7")),
+                SC1_only = SC1_count >= 1 & SC2_count == 0 &
+                  SC3_count == 0 & SC4_count == 0 &
+                  SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+                SC2_only = SC2_count >= 1 & SC1_count == 0 & 
                     SC3_count == 0 & SC4_count == 0 & 
                     SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC2_only = SC2_count >= 1 & SC1_count == 0 & 
-                    SC3_count == 0 & SC4_count == 0 & 
-                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC3_only = SC3_count >= 1 & SC1_count == 0 & 
+                SC3_only = SC3_count >= 1 & SC1_count == 0 & 
                     SC2_count == 0 & SC4_count == 0 & 
                     SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC4_only = SC4_count >= 1 & SC1_count == 0 & 
+                SC4_only = SC4_count >= 1 & SC1_count == 0 & 
                     SC2_count == 0 & SC3_count == 0 & 
                     SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC5_only = SC5_count >= 1 & SC1_count == 0 & 
+                SC5_only = SC5_count >= 1 & SC1_count == 0 & 
                     SC2_count == 0 & SC3_count == 0 & 
                     SC4_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC6_only = SC6_count >= 1 & SC1_count == 0 & 
+                SC6_only = SC6_count >= 1 & SC1_count == 0 & 
                     SC2_count == 0 & SC3_count == 0 & 
                     SC4_count == 0 & SC5_count == 0 & SC7_count == 0,
-          SC7_only = SC7_count >= 1 & SC1_count == 0 & 
+                SC7_only = SC7_count >= 1 & SC1_count == 0 & 
                     SC2_count == 0 & SC3_count == 0 & 
                     SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
       ungroup()
-
+    
     spp_diff_sites
     ```
 
-### Species accumulation curves
+## 6. Ecological Analysis: Biodiversity Metrics
 
-This section assesses how species richness increases with sampling effort, both overall and for individual sites.
+### Sampling Effort (Accumulation Curves)
 
-#### Accumulation curve: all samples
+#### For all samples
 
--   Presence/absence transformation and computation of overall species accumulation curve.
+-   **Matrix creation.** Presence/absence transformation and computation of overall species accumulation curve.
 
     ```{r}
     # Transform abundances to binary data
-    taxa_sample_wider_jac  <- 
-      taxa_sample_wider  %>%
+    sample_taxa_wider_jac <- 
+      sample_taxa_wider  %>%
       mutate(across(c(3:ncol(.)), 
                     jaccarize))
 
     # Collector curve
     accum_all <- 
-      specaccum(taxa_sample_wider_jac[3:ncol(taxa_sample_wider_jac)],
+      specaccum(sample_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
                 # method = "random",
                 method = "random")
                 # permutations = 999)
@@ -2029,7 +1485,7 @@ This section assesses how species richness increases with sampling effort, both 
              value = "value")
     ```
 
--   **Collector plot: all samples.** Plot species accumulation curve for all samples, using boxplots to illustrate richness variance by permutation.
+-   **Plot rarefaction curves.** Analyze species accumulation to evaluate if sequencing depth was sufficient to capture site diversity.
 
     ```{r}
     collector_plot_all <-
@@ -2074,9 +1530,9 @@ This section assesses how species richness increases with sampling effort, both 
     collector_plot_all
     ```
 
-#### Accumulation curve: by site
+#### For each site
 
--   Compute accumulation curve for each local site individually.
+-   **Matrix creation.** Presence/absence transformation and computation of overall species accumulation curve.
 
     ```{r}
     # SC1
@@ -2172,8 +1628,8 @@ This section assesses how species richness increases with sampling effort, both 
     accum_sc6_df <- 
       tibble("site" = "SC6",
              "samples" = accum_sc6$sites,
-             "richness" = accum_sc6_df$richness,
-             "sd" = accum_sc6_df$sd)
+             "richness" = accum_sc6$richness,
+             "sd" = accum_sc6$sd)
 
     #SC7
     sc7_taxa_wider_jac <-
@@ -2199,7 +1655,7 @@ This section assesses how species richness increases with sampling effort, both 
                                             "SC5", "SC6", "SC7")))
     ```
 
--   **Collector plot: by site.** Plot species accumulation curves for each site, with labels and colors corresponding to each site, and show confidence intervals.
+-   **Plot rarefaction curves.** Analyze species accumulation to evaluate if sequencing depth was sufficient to capture site diversity.
 
     ```{r}
     collector_plot_sites <-
@@ -2245,20 +1701,22 @@ This section assesses how species richness increases with sampling effort, both 
     collector_plot_sites
     ```
 
-### Alpha-Diversity
+### Alpha Diversity
 
--   **Data preparation**
+#### Indices Calculation
+
+-   **Calculate diversity indices.** Compute Shannon, Simpson, and Richness (Observed) metrics for each site/method.
 
     ```{r}
-    # Diversity by Sample
+    # Metrics for each sample for eDNA
     alpha_sample_tbl <- 
-      taxa_sample_wider %>%
+      sample_taxa_wider %>%
       rowwise() %>%
       reframe(Amostra,
               Local, 
-              Observed = specnumber(c_across(3:ncol(taxa_sample_wider))),
-             Shannon = diversity(c_across(3:ncol(taxa_sample_wider)), index = "shannon"),
-             Simpson = diversity(c_across(3:ncol(taxa_sample_wider)), index = "simpson")) %>%
+              Observed = specnumber(c_across(3:ncol(sample_taxa_wider))),
+             Shannon = diversity(c_across(3:ncol(sample_taxa_wider)), index = "shannon"),
+             Simpson = diversity(c_across(3:ncol(sample_taxa_wider)), index = "simpson")) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
                             Shannon, 
@@ -2267,14 +1725,14 @@ This section assesses how species richness increases with sampling effort, both 
       mutate(Method = "Metabarcoding") %>% 
       print()
       
-    # Diversity by Site
+    # Metrics for each site for eDNA
     alpha_site_tbl <- 
-      taxa_site_wider %>%
+      site_taxa_wider %>%
       rowwise() %>%
       reframe(Site,
-              Observed = specnumber(c_across(2:ncol(taxa_site_wider))),
-              Shannon = diversity(c_across(2:ncol(taxa_site_wider)), index = "shannon"),
-              Simpson = diversity(c_across(2:ncol(taxa_site_wider)), index = "simpson")) %>%
+              Observed = specnumber(c_across(2:ncol(site_taxa_wider))),
+              Shannon = diversity(c_across(2:ncol(site_taxa_wider)), index = "shannon"),
+              Simpson = diversity(c_across(2:ncol(site_taxa_wider)), index = "simpson")) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
                             Shannon, 
@@ -2282,44 +1740,8 @@ This section assesses how species richness increases with sampling effort, both 
                    names_to = "index") %>%
       mutate(Method = "Metabarcoding") %>% 
       print()
-    ```
 
--   **Boxplot Alpha-Diversity**
-
-    ```{r}
-    alpha_sample_tbl %>%
-      filter(index %in% c("Observado",
-                          "Simpson")) %>% 
-      ggplot(aes(x = Site,
-                 y = value,
-                 fill = Site)) +
-      geom_boxplot(alpha = 0.7) +
-      # geom_point(aes(fill = Sample)) +
-      facet_wrap(~index, nrow = 1, scales = "free_y") +
-      scale_fill_manual(values = site_colors) +
-      theme(panel.grid.major = element_line(color = "grey",
-                                            linewidth = 0.2,
-                                            linetype = 1),
-            axis.text.x = element_text(size = 14),
-            axis.text.y = element_text(size = 14),
-            strip.text = element_text(size = 14,
-                                      face = "bold"),
-            legend.position = "none",
-            legend.key.height = unit(3, "cm"),
-            axis.title.x = element_text(size = 16,
-                                        face = "bold"),
-            axis.title.y = element_text(size = 16,
-                                        face = "bold")) +
-      labs(x = "Local",
-           y = "Valor")
-    ```
-
-#### Metabarcoding vs Traditional Methods
-
--   **Data preparation**
-
-    ```{r}
-    # Alpha-diversity for each site for traditional methods data
+    # Metrics for each site for traditional
     alpha_traditional_tbl <- 
       traditional_wider %>%
       rowwise() %>%
@@ -2339,29 +1761,11 @@ This section assesses how species richness increases with sampling effort, both 
     # Bind rows
     alpha_methods <-
       alpha_traditional_tbl %>% 
-      bind_rows(alpha_site_tbl)
+      bind_rows(alpha_site_tbl) %>% 
+      print()
     ```
 
--   **Wilcoxon test**
-
-    ```{r}
-    # Alpha-diversity Observed index
-    alpha_observed <-
-      alpha_methods %>% 
-      filter(index %in% "Observed",
-             Site != "SC5") %>% 
-      pivot_wider(names_from = c(Method),
-                  id_cols = Site,
-                  values_from = value)
-
-      wilcox.test(x = alpha_observed$Metabarcoding,
-                  y = alpha_observed$Traditional,
-                  paired = TRUE,
-                  alternative = "greater",
-                  conf.int = TRUE)
-    ```
-
--   **Barplot Alpha-Diversity**
+-   **Plot Barplot with** **Diversity Indices.** Compare alpha-diversity indexes among each method.
 
     ```{r}
     barplot_alpha_methods <-
@@ -2381,6 +1785,9 @@ This section assesses how species richness increases with sampling effort, both 
                                        index = c(Observed = "Observado",
                                                  Simpson = "Simpson"))) +
         scale_fill_manual(values = site_colors) +
+        # stat_compare_means(method = "wilcox.test",
+        #                    paired = TRUE,
+        #                    method.args = list(alternative = "greater")) +
         theme(panel.grid.major = element_line(color = "grey",
                                               linewidth = 0.2,
                                               linetype = 1),
@@ -2394,58 +1801,51 @@ This section assesses how species richness increases with sampling effort, both 
                                           face = "bold"),
               axis.title.y = element_text(size = 16,
                                           face = "bold")) +
-        labs(x = "Ponto amostral",
+        labs(x = "Local",
              y = "Valor")
 
     # Export plot
-    ggsave(plot = barplot_alpha_methods, 
-           filename = paste0(figs_path, "/barplot_alpha_methods", "-",
-                             Sys.Date(), ".png", sep = ""),
-           units = "cm", 
-           height = 22.5, 
-           width = 20, 
-           dpi = 600)
+    # ggsave(plot = barplot_alpha_methods, 
+    #        filename = paste0(figs_path, "/barplot_alpha_methods", "-",
+    #                          Sys.Date(), ".png", sep = ""),
+    #        units = "cm", 
+    #        height = 22.5, 
+    #        width = 20, 
+    #        dpi = 600)
 
     barplot_alpha_methods
-
     ```
 
--   **Boxplot Alpha-Diversity**
+#### Statistical Comparison
+
+-   **Test for normality.** Check if diversity data follows a normal distribution (Shapiro-Wilk test) to decide on parametric vs. non-parametric tests.
 
     ```{r}
-    alpha_methods %>% 
-      filter(index == "Observed",
-             Site != "SC5") %>%
-      mutate(Method = ifelse(Method == "Metabarcoding",
-                             "eDNA",
-                             "Tradicional")) %>% 
-      ggplot(aes(x = Method,
-                 y = value,
-                 fill = Method)) +
-      geom_boxplot() +
-      stat_compare_means(method = "wilcox.test",
-                         paired = TRUE,
-                         comparisons = list(c("eDNA", "Tradicional")),
-                         method.args = list(alternative = "greater")) +
-      scale_fill_manual(values = method_colors) +
-      theme(panel.grid.major = element_line(color = "grey",
-                                            linewidth = 0.2,
-                                            linetype = 1),
-            axis.text.x = element_text(size = 14),
-            axis.text.y = element_text(size = 14),
-            strip.text = element_text(size = 14,
-                                      face = "bold"),
-            legend.position = "none",
-            legend.key.height = unit(3, "cm"),
-            axis.title = element_text(size = 16,
-                                      face = "bold")) +
-      labs(x = "Método",
-           y = "Valor")
+
     ```
 
-### Principal Coordinates Analysis (PCoA)
+-   **Compare alpha diversity.** Perform Wilcoxon rank-sum tests to assess if there are significant differences in diversity between eDNA and traditional methods.
 
-Procedures for preparing data, performing ordination, and visualizing fish community composition.
+    ```{r}
+    # Alpha-diversity Observed index
+    alpha_observed <-
+      alpha_methods %>% 
+      filter(index %in% "Observed",
+             Site != "SC5") %>% 
+      pivot_wider(names_from = c(Method),
+                  id_cols = Site,
+                  values_from = value)
+
+      wilcox.test(x = alpha_observed$Metabarcoding,
+                  y = alpha_observed$Traditional,
+                  paired = TRUE,
+                  alternative = "greater",
+                  conf.int = TRUE)
+    ```
+
+### Beta Diversity (Ordination)
+
+#### Data Preparation (Jaccard/Bray)
 
 -   **Data preparation for ordination.** Create a wide-format table (**`Samples x Taxa`**) with RRA values for vegan ordination.
 
@@ -2453,30 +1853,33 @@ Procedures for preparing data, performing ordination, and visualizing fish commu
     # Convert the long table to a wide format (Samples x IDs)
     taxa_sample_wider_PCoA <- 
       taxa_sample_longer %>%
-      select(c(Local, 
-               Amostra,
+      select(c(Site, 
+               Sample,
                Taxon,
                `%`)) %>%
-      pivot_wider(id_cols = c(Local,
-                              Amostra),
+      pivot_wider(id_cols = c(Site,
+                              Sample),
                   names_from = Taxon,
                   values_from = `%`,
                   values_fn = sum_uniq,
                   names_sort = TRUE,
                   names_prefix = "ID_") %>%
-      relocate(c(Local,
-                 Amostra,
+      relocate(c(Site,
+                 Sample,
                  starts_with("ID_"))) %>%
       mutate(across(starts_with("ID_"), 
                     \(x) replace_na(x, 0))) %>%
-      mutate("Local" = as.factor(Local)) %>%
-      mutate("Amostra" = as.factor(Amostra))
+      mutate("Local" = as.factor(Site)) %>% 
+      mutate("Amostra" = as.factor(Sample)) %>% 
+      print()
         
     # Prepare data for vegan and fix rownames
-    taxa_sample_wider_PCoA <- taxa_sample_wider_PCoA %>%
+    taxa_sample_wider_PCoA <- 
+      taxa_sample_wider_PCoA %>%
       mutate("Sample number" = row_number()) %>%
       relocate("Sample number") %>%
-      as.data.frame()
+      as.data.frame() %>% 
+      print()
         
     row.names(taxa_sample_wider_PCoA) <- 
       taxa_sample_wider_PCoA$`Sample number`
@@ -2490,25 +1893,36 @@ Procedures for preparing data, performing ordination, and visualizing fish commu
       str_replace_all(pattern = "\\)", replacement = "")
     ```
 
--   **Ordination, vector fitting, and result extraction.** Analyze community composition differences using PCoA on a Jaccard distance matrix.
+-   **Transform data.** Convert abundance matrices into distance matrices using Jaccard (presence/absence) or Bray-Curtis (abundance) indices.
 
     ```{r}
     # Filter data and create distance matrix
-    taxa_sample_wider_PCoA <- taxa_sample_wider_PCoA %>% 
+    taxa_sample_wider_PCoA <- 
+      taxa_sample_wider_PCoA %>% 
       select(where(~ any(. != 0)))
 
-    pcOa_dist <- vegan::vegdist(x = taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)],
+    pcOa_dist <- 
+      vegan::vegdist(x = taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)],
                                 method = "jaccard",
                                 binary = TRUE)
+    ```
 
-    # Run PCoA
+#### PCoA & Vector Fitting
+
+-   **Run ordination (PCoA/NMDS).** Perform Principal Coordinates Analysis to visualize compositional differences between sites.
+
+    ```{r}
     pcOa <- cmdscale(pcOa_dist, 
                      eig = TRUE)
 
     ordiplot(pcOa, 
              display = 'sites', 
              type = 'text')
-        
+    ```
+
+-   **Fit environmental vectors.** Correlate environmental variables (e.g., elevation) with the ordination axes to interpret ecological drivers.
+
+    ```{r}
     # Fit species vectors to the ordination
     meta.spp.fit <- envfit(pcOa, 
                            taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)], 
@@ -2573,7 +1987,9 @@ Procedures for preparing data, performing ordination, and visualizing fish commu
         }
     ```
 
--   **Ordination plot**. PCoA Beta-Diversity composition between sites.
+#### Visualization
+
+-   **Plot ordination.** Generate scatter plots of the PCoA results, coloring points by Site or Method.
 
     ```{r}
     percent_pcOa <- pcOa$eig / sum(pcOa$eig) * 100
