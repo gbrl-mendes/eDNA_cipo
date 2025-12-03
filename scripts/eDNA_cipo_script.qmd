@@ -1,4 +1,5 @@
 ---
+76---
 title: "Análise de eDNA metabarcoding Cipó"
 author: "Gabriel A. Mendes"
 format: html
@@ -1414,7 +1415,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
 
 -   Summary species list grouped by site in *wider* format.
 
-```{r}
+    ```{r}
     # Wider format list (grouped by site)
     taxa_site_wider <-
       curated_results %>%
@@ -1439,8 +1440,8 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       pivot_wider(id_cols = Site,
                  names_from = Taxon,
                  values_from = Reads) %>%
-  mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
-  print()
+      mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+      print()
 
     # Orders for each taxon detected previously
     ordens_f <- 
@@ -1457,7 +1458,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       relocate(Ordem,
                `Taxon (Curated ID)`) %>% 
       print()
-```
+    ```
 
 -   Taxa detected after integrative curation showing read abundance, ASVs, and OTUs.
 
@@ -1500,7 +1501,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
 
 ### Improvements
 
--   Taxonomy retrieval
+-   Taxonomy retrieval for traditional methods results.
 
     ```{r}
     # Retrieve curated genera
@@ -1541,7 +1542,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       select(-c(SC1, SC2, SC3, SC4, SC6, SC7))
     ```
 
--   Longer Table
+-   Traditional methods results with complete taxonomy in *longer table* format
 
     ```{r}
     traditional_longer <-
@@ -1554,21 +1555,20 @@ Preliminary analysis of raw data without integrative curation of ASVs.
       mutate(Method = "Traditional")
     ```
 
--   Wider Table
+-   Traditional methods results with complete taxonomy in *wider table* format.
 
-    ```{r}
-    # Wider list grouped by site
-    traditional_wider <- 
-    traditional_longer %>%
-      pivot_wider(id_cols = c(Site),
-                  names_from = Taxon,
-                  values_from = Ocurrence) %>% 
-      mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
-      print()
-    ```
+```{{r}}
+# Wider list grouped by site
+traditional_wider <- 
+traditional_longer %>%
+  pivot_wider(id_cols = c(Site),
+              names_from = Taxon,
+              values_from = Ocurrence) %>% 
+  mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+  print()
+```
 
-
-- Absence/Presence table
+-   Absence/Presence table
 
     ```{r}
     merged_methods_longer_pa <-  
@@ -1583,7 +1583,7 @@ Preliminary analysis of raw data without integrative curation of ASVs.
                Site,
                fill = list(Presence = "Absent")) %>%
       ungroup() %>%
-      left_join(merged_methods_longer %>% 
+      left_join(merged_methods_longer %>%
                   select(Family, Taxon),
                 by = "Taxon") %>%
       unique()
@@ -1611,6 +1611,7 @@ This first section provides core analytical functions and sets color palettes fo
     ```
 
 -   Custom function to convert abundances to binary data
+
     ```{r}
     # Binary function (presence/absence)
     jaccarize <- function(x) {
@@ -1618,7 +1619,7 @@ This first section provides core analytical functions and sets color palettes fo
       }
     ```
 
--   Assign colors for each reservoir site and for all sites.
+-   Assign colors for each sampling site and one for all.
 
     ```{r}
     # Color palettes for each site 
@@ -1630,15 +1631,14 @@ This first section provides core analytical functions and sets color palettes fo
     all_colors <- c("#175449FF")
     ```
 
--   Method colors
+-   Assign colors for each sampling method.
 
     ```{r}
     method_colors <- c("eDNA" = "#c4dfff", 
                        "Tradicional" = "#99d09e")
     ```
 
-
--   Create palletes
+-   Create palletes.
 
     ```{r}
     colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF",
@@ -1669,9 +1669,10 @@ This first section provides core analytical functions and sets color palettes fo
     palette_5 <- palette_full[index_colors_5]
     ```
 
-=   eDNA and Traditional Data merge
+-   Merge eDNA metabarcoding and Traditional Methods data.
 
     ```{r}
+    #Longer format
     merged_methods_longer <- 
       taxa_site_longer %>% 
       select(-c(`Site abundance`, `%`)) %>% 
@@ -1680,11 +1681,38 @@ This first section provides core analytical functions and sets color palettes fo
       bind_rows(traditional_longer)
     ```
 
+### Bar plots
+
+-   eDNA metabarcoding and Traditional Methods data orders and families evolution through sampling sites.
+
+    ```{r}
+    merged_methods_longer %>%
+      # count(Site, Method, Order) %>%
+      count(Site, Method, Order, Family) %>%
+      group_by(Site, Method) %>%
+      mutate(proportion = n / sum(n)) %>% 
+      ggplot(aes(x = Site,
+                 y = proportion,
+                 # fill = Order,
+                 fill = Family,
+                 width = 0.95)) +
+      geom_bar(stat = "identity",
+               position = "stack") +
+      facet_grid(cols = vars(Method),
+                 rows = vars(Order),
+                 scales = "free") +
+      # scale_fill_manual(values = palette_5)
+      scale_fill_manual(values = palette_20)
+    # +
+    # facet_grid(cols = vars(Site),
+    #            scales = "free_x")
+    ```
+
 ### Tile plots
 
 #### eDNA Metabarcoding
 
--   Tile plot for species analysis per sample
+-   Tile plot for species analysis per sample.
 
     ```{r}
     # Define factor Locals for plot
@@ -1759,7 +1787,7 @@ This first section provides core analytical functions and sets color palettes fo
     tile_plot_sample
     ```
 
--   Tile plot for species analysis per site
+-   Tile plot for species analysis per site.
 
     ```{r}
     # Define factor Locals for plot
@@ -1828,11 +1856,11 @@ This first section provides core analytical functions and sets color palettes fo
            dpi = 600)
 
     tile_plot_site
-```
+    ```
 
-#### Metabarcoding vs Traditional Methods
+#### Metabarcoding versus Traditional Methods
 
--   Species comparation per site.
+-   **Tile Plot: by methods.** Species comparation per site.
 
     ```{r}
     # Define factor Locals for plot
@@ -1892,27 +1920,11 @@ This first section provides core analytical functions and sets color palettes fo
            dpi = 600)
 
     tile_plot_methods
-```
-
-### Bar plots
-
-```{r}
-taxa_sample_longer %>% 
-  ggplot(aes(x = Site,
-             y = `%` / 3,
-             fill = Order,
-             width = 0.95)) +
-  geom_bar(stat = "identity", 
-           position = "stack") +
-   scale_fill_manual(values = palette_5)
-  # +
-  # facet_grid(cols = vars(Site),
-  #            scales = "free_x")
-```
+    ```
 
 ### Venn Diagram
 
--   This section prepares data to identify common and exclusive species between different monitoring methods and sampling sites. The resulting tables can be used to create Venn diagrams.
+-   This section prepares data to identify common and exclusive species between different monitoring methods and sampling sites. The resulting tables will be used to create Venn diagrams.
 
     ```{r}
     # Common species between eDNA and Traditional Methods
@@ -1980,77 +1992,6 @@ taxa_sample_longer %>%
     spp_diff_sites
     ```
 
-
-    ```{r}
-    # Only at species level
-    species_level_edna <-
-    merged_methods_longer %>% 
-      filter(Method == "Metabarcoding",
-             !str_detect(Taxon, "^\\w+\\s+sp\\.? ?\\d?$")) %>% 
-      select(Taxon) %>% 
-      pull() %>%
-      unique()
-    
-    # Common species between eDNA and Traditional Methods
-    spp_comm <-
-    merged_methods_longer %>% 
-      filter(Taxon %in% species_level_edna) %>%
-      group_by(Taxon) %>%
-      summarise(n_Level = n_distinct(Method)) %>%
-      filter(n_Level >= 2) %>%
-      select(Taxon)
-    
-    spp_comm
-    
-    # Exclusive species to eDNA and Traditional Methods
-    spp_diff <- merged_methods_longer %>%
-      filter(Taxon %in% species_level_edna) %>%
-      group_by(Taxon) %>%
-      summarise(eDNA_count = sum(as.integer(Method == "Metabarcoding")),
-                Traditional_count = sum(as.integer(Method == "Traditional")),
-                eDNA_only = eDNA_count >= 1 & Traditional_count == 0,
-                Traditional_only = eDNA_count == 0 & Traditional_count >= 1) %>%
-      ungroup()
-          
-    spp_diff
-    
-    # Exclusive species to each sample site
-    spp_diff_sites <- resume_venn %>%
-      group_by(Taxon) %>%
-      summarise(SC1_count = sum(as.integer(Site == "SC1")),
-          SC2_count = sum(as.integer(Site == "SC2")),
-          SC3_count = sum(as.integer(Site == "SC3")),
-          SC4_count = sum(as.integer(Site == "SC4")),
-          SC5_count = sum(as.integer(Site == "SC5")),
-          SC6_count = sum(as.integer(Site == "SC6")),
-          SC7_count = sum(as.integer(Site == "SC7")),
-          SC1_only = SC1_count >= 1 & SC2_count == 0 & 
-                    SC3_count == 0 & SC4_count == 0 & 
-                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC2_only = SC2_count >= 1 & SC1_count == 0 & 
-                    SC3_count == 0 & SC4_count == 0 & 
-                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC3_only = SC3_count >= 1 & SC1_count == 0 & 
-                    SC2_count == 0 & SC4_count == 0 & 
-                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC4_only = SC4_count >= 1 & SC1_count == 0 & 
-                    SC2_count == 0 & SC3_count == 0 & 
-                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC5_only = SC5_count >= 1 & SC1_count == 0 & 
-                    SC2_count == 0 & SC3_count == 0 & 
-                    SC4_count == 0 & SC6_count == 0 & SC7_count == 0,
-          SC6_only = SC6_count >= 1 & SC1_count == 0 & 
-                    SC2_count == 0 & SC3_count == 0 & 
-                    SC4_count == 0 & SC5_count == 0 & SC7_count == 0,
-          SC7_only = SC7_count >= 1 & SC1_count == 0 & 
-                    SC2_count == 0 & SC3_count == 0 & 
-                    SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
-      ungroup()
-
-    spp_diff_sites
-    ```
-
-
 ### Species accumulation curves
 
 This section assesses how species richness increases with sampling effort, both overall and for individual sites.
@@ -2065,7 +2006,7 @@ This section assesses how species richness increases with sampling effort, both 
       taxa_sample_wider  %>%
       mutate(across(c(3:ncol(.)), 
                     jaccarize))
-    
+
     # Collector curve
     accum_all <- 
       specaccum(taxa_sample_wider_jac[3:ncol(taxa_sample_wider_jac)],
@@ -2135,7 +2076,7 @@ This section assesses how species richness increases with sampling effort, both 
 
 #### Accumulation curve: by site
 
--   Compute and plot accumulation curve for each local site individually.
+-   Compute accumulation curve for each local site individually.
 
     ```{r}
     # SC1
@@ -2251,10 +2192,11 @@ This section assesses how species richness increases with sampling effort, both 
              "sd" = accum_sc7$sd)
         
     # Combine and plot
-    combined_accum <- bind_rows(accum_sc1_df, accum_sc2_df, accum_sc3_df, accum_sc4_df,
-                                accum_sc5_df, accum_sc6_df, accum_sc7_df) %>%
-      mutate(site = factor(site, levels = c("SC1", "SC2", "SC3", "SC4", 
-                                                  "SC5", "SC6", "SC7")))
+    combined_accum <- 
+      bind_rows(accum_sc1_df, accum_sc2_df, accum_sc3_df, accum_sc4_df,
+                accum_sc5_df, accum_sc6_df, accum_sc7_df) %>%
+      mutate(site = factor(site, levels = c("SC1", "SC2", "SC3", "SC4",
+                                            "SC5", "SC6", "SC7")))
     ```
 
 -   **Collector plot: by site.** Plot species accumulation curves for each site, with labels and colors corresponding to each site, and show confidence intervals.
@@ -2324,7 +2266,7 @@ This section assesses how species richness increases with sampling effort, both 
                    names_to = "index") %>%
       mutate(Method = "Metabarcoding") %>% 
       print()
-  
+      
     # Diversity by Site
     alpha_site_tbl <- 
       taxa_site_wider %>%
@@ -2371,7 +2313,7 @@ This section assesses how species richness increases with sampling effort, both 
       labs(x = "Local",
            y = "Valor")
     ```
-  
+
 #### Metabarcoding vs Traditional Methods
 
 -   **Data preparation**
@@ -2393,7 +2335,7 @@ This section assesses how species richness increases with sampling effort, both 
                    names_to = "index") %>%
       mutate(Method = "Traditional") %>% 
       print()
-    
+
     # Bind rows
     alpha_methods <-
       alpha_traditional_tbl %>% 
@@ -2411,7 +2353,7 @@ This section assesses how species richness increases with sampling effort, both 
       pivot_wider(names_from = c(Method),
                   id_cols = Site,
                   values_from = value)
-    
+
       wilcox.test(x = alpha_observed$Metabarcoding,
                   y = alpha_observed$Traditional,
                   paired = TRUE,
@@ -2419,7 +2361,7 @@ This section assesses how species richness increases with sampling effort, both 
                   conf.int = TRUE)
     ```
 
--   **Barplot Alpha-Diversity**   
+-   **Barplot Alpha-Diversity**
 
     ```{r}
     barplot_alpha_methods <-
@@ -2439,9 +2381,6 @@ This section assesses how species richness increases with sampling effort, both 
                                        index = c(Observed = "Observado",
                                                  Simpson = "Simpson"))) +
         scale_fill_manual(values = site_colors) +
-        stat_compare_means(method = "wilcox.test",
-                           paired = TRUE,
-                           method.args = list(alternative = "greater")) +
         theme(panel.grid.major = element_line(color = "grey",
                                               linewidth = 0.2,
                                               linetype = 1),
@@ -2455,9 +2394,9 @@ This section assesses how species richness increases with sampling effort, both 
                                           face = "bold"),
               axis.title.y = element_text(size = 16,
                                           face = "bold")) +
-        labs(x = "Local",
+        labs(x = "Ponto amostral",
              y = "Valor")
-    
+
     # Export plot
     ggsave(plot = barplot_alpha_methods, 
            filename = paste0(figs_path, "/barplot_alpha_methods", "-",
@@ -2468,10 +2407,10 @@ This section assesses how species richness increases with sampling effort, both 
            dpi = 600)
 
     barplot_alpha_methods
-    
+
     ```
 
--   **Boxplot Alpha-Diversity** 
+-   **Boxplot Alpha-Diversity**
 
     ```{r}
     alpha_methods %>% 
@@ -2503,7 +2442,6 @@ This section assesses how species richness increases with sampling effort, both 
       labs(x = "Método",
            y = "Valor")
     ```
-
 
 ### Principal Coordinates Analysis (PCoA)
 
