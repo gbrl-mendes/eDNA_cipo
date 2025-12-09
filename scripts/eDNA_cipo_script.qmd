@@ -1316,12 +1316,12 @@ traditional_longer %>%
     # Define factor Locals for plot
     spp_levels <- 
       sort(unique(merged_methods_longer$Taxon))
-    
+
     # Create new Site colled Resumo
     merged_methods_summary <-
     merged_methods_longer %>% 
       mutate(Site = "Resumo")
-    
+
     # Plot
     tile_plot_methods <-
     merged_methods_longer %>%
@@ -1444,7 +1444,7 @@ traditional_longer %>%
                     SC2_count == 0 & SC3_count == 0 & 
                     SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
       ungroup()
-    
+
     spp_diff_sites
     ```
 
@@ -1518,7 +1518,7 @@ traditional_longer %>%
       labs(x = "samples",
            y = "richness")
 
-    # Export plot for the paper
+    # Export plot 
     # ggsave(file = paste0(figs_path,"/", "collector_plot_all",
     #                      "-", Sys.Date(), ".pdf", collapse = ""),
     #        plot = collector_plot_all, 
@@ -1714,9 +1714,9 @@ traditional_longer %>%
       rowwise() %>%
       reframe(Amostra,
               Local, 
-              Observed = specnumber(c_across(3:ncol(sample_taxa_wider))),
-             Shannon = diversity(c_across(3:ncol(sample_taxa_wider)), index = "shannon"),
-             Simpson = diversity(c_across(3:ncol(sample_taxa_wider)), index = "simpson")) %>%
+              Observed = specnumber(c_across(3:ncol(.))),
+             Shannon = diversity(c_across(3:ncol(.)), index = "shannon"),
+             Simpson = diversity(c_across(3:ncol(.)), index = "simpson")) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
                             Shannon, 
@@ -1730,9 +1730,9 @@ traditional_longer %>%
       site_taxa_wider %>%
       rowwise() %>%
       reframe(Site,
-              Observed = specnumber(c_across(2:ncol(site_taxa_wider))),
-              Shannon = diversity(c_across(2:ncol(site_taxa_wider)), index = "shannon"),
-              Simpson = diversity(c_across(2:ncol(site_taxa_wider)), index = "simpson")) %>%
+              Observed = specnumber(c_across(2:ncol(.))),
+              Shannon = diversity(c_across(2:ncol(.)), index = "shannon"),
+              Simpson = diversity(c_across(2:ncol(.)), index = "simpson")) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
                             Shannon, 
@@ -1746,9 +1746,9 @@ traditional_longer %>%
       traditional_wider %>%
       rowwise() %>%
       reframe(Site,
-              Observed = specnumber(c_across(2:ncol(traditional_wider))),
-             Shannon = diversity(c_across(2:ncol(traditional_wider)), index = "shannon"),
-             Simpson = diversity(c_across(2:ncol(traditional_wider)), index = "simpson")
+              Observed = specnumber(c_across(2:ncol(.))),
+             Shannon = diversity(c_across(2:ncol(.)), index = "shannon"),
+             Simpson = diversity(c_across(2:ncol(.)), index = "simpson")
              ) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
@@ -2065,7 +2065,7 @@ traditional_longer %>%
       # scale_fill_manual(values = cores) +
       # scale_colour_manual(values = cores)
 
-    # Exporting plot for the paper
+    # Exporting plot
     ggsave(plot = PCoA_MCE_2, 
            filename = paste0(figs_path, "/PCoA_all", "-",
                              Sys.Date(), ".pdf", sep = ""),
