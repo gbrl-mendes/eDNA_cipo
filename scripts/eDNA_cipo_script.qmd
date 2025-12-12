@@ -457,8 +457,8 @@ editor_options:
 
     ```{r}
     meta_data <-
-      tibble("metadata 1" = c("SC1", "SC2", "SC3", "SC4", "SC5", "SC6", "SC7"),
-             "elevation" = c(859, 812, 800, 1006, 784, 989, 752))
+      tibble("Site" = c("SC1", "SC2", "SC3", "SC4", "SC5", "SC6", "SC7"),
+             "Elevation" = c(859, 812, 800, 1006, 784, 989, 752))
     ```
 
 #### Data Shaping (Long/Wide Formats)
@@ -534,16 +534,16 @@ editor_options:
       group_by(`Curated ID`, Sample) %>% 
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
-      reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Curated ID)`,
-              "Genero" = `Genus (Curated ID)`,
-              "Amostra" = Sample,
-              "Local" = `Metadata 1`,
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              Sample,
+              "Site" = `Metadata 1`,
               "Taxon" = `Curated ID`,
               Reads,
               "%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
       unique() %>% 
-      pivot_wider(id_cols = c(Local, Amostra),
+      pivot_wider(id_cols = c(Site, Sample),
                  names_from = Taxon,
                  values_from = Reads) %>% 
       mutate(across(c(3:ncol(.)), ~ replace_na(., 0))) %>% 
@@ -1316,12 +1316,12 @@ traditional_longer %>%
     # Define factor Locals for plot
     spp_levels <- 
       sort(unique(merged_methods_longer$Taxon))
-    
+
     # Create new Site colled Resumo
     merged_methods_summary <-
     merged_methods_longer %>% 
       mutate(Site = "Resumo")
-    
+
     # Plot
     tile_plot_methods <-
     merged_methods_longer %>%
@@ -1444,7 +1444,7 @@ traditional_longer %>%
                     SC2_count == 0 & SC3_count == 0 & 
                     SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
       ungroup()
-    
+
     spp_diff_sites
     ```
 
@@ -1712,8 +1712,8 @@ traditional_longer %>%
     alpha_sample_tbl <- 
       sample_taxa_wider %>%
       rowwise() %>%
-      reframe(Amostra,
-              Local, 
+      reframe(Sample,
+              Site, 
               Observed = specnumber(c_across(3:ncol(sample_taxa_wider))),
              Shannon = diversity(c_across(3:ncol(sample_taxa_wider)), index = "shannon"),
              Simpson = diversity(c_across(3:ncol(sample_taxa_wider)), index = "simpson")) %>%
@@ -1758,10 +1758,16 @@ traditional_longer %>%
       mutate(Method = "Traditional") %>% 
       print()
 
-    # Bind rows
-    alpha_methods <-
+    # Bind rows for Site
+    alpha_site_methods <- 
       alpha_traditional_tbl %>% 
       bind_rows(alpha_site_tbl) %>% 
+      print()
+    
+    # Bind row for Sample
+    alpha_sample_methods <-
+      alpha_traditional_tbl %>% 
+      bind_rows(alpha_sample_tbl) %>% 
       print()
     ```
 
@@ -1769,7 +1775,7 @@ traditional_longer %>%
 
     ```{r}
     barplot_alpha_methods <-
-        alpha_methods %>% 
+        alpha_site_methods %>% 
         filter(index != "Shannon") %>% 
         ggplot(aes(x = Site,
                    y = value,
@@ -1791,16 +1797,13 @@ traditional_longer %>%
         theme(panel.grid.major = element_line(color = "grey",
                                               linewidth = 0.2,
                                               linetype = 1),
-              axis.text.x = element_text(size = 14),
-              axis.text.y = element_text(size = 14),
+              axis.text = element_text(size = 14),
               strip.text = element_text(size = 14,
                                         face = "bold"),
               legend.position = "none",
               legend.key.height = unit(3, "cm"),
-              axis.title.x = element_text(size = 16,
-                                          face = "bold"),
-              axis.title.y = element_text(size = 16,
-                                          face = "bold")) +
+              axis.title = element_text(size = 16,
+                                        face = "bold")) +
         labs(x = "Local",
              y = "Valor")
 
@@ -1821,7 +1824,13 @@ traditional_longer %>%
 -   **Test for normality.** Check if diversity data follows a normal distribution (Shapiro-Wilk test) to decide on parametric vs. non-parametric tests.
 
     ```{r}
-
+    alpha_methods %>% 
+      left_join(meta_data,
+                by = "Site") %>% 
+      relocate(Sample,
+               Site,
+               Elevation) %>% 
+      ggplot(aes(Elevation, ))
     ```
 
 -   **Compare alpha diversity.** Perform Wilcoxon rank-sum tests to assess if there are significant differences in diversity between eDNA and traditional methods.
@@ -1841,6 +1850,52 @@ traditional_longer %>%
                   paired = TRUE,
                   alternative = "greater",
                   conf.int = TRUE)
+    ```
+
+### Correlation
+
+-   Data
+
+    ```{r}
+    # corr_richness_elevation <-
+    alpha_sample_methods %>% 
+      filter(index == "Observed",
+             Method == "Metabarcoding") %>% 
+      left_join(meta_data,
+                by = "Site") %>%
+      relocate(Sample,
+               Site,
+               Elevation) %>% 
+      ggplot(aes(Elevation, value)) +
+      geom_point(aes(color = Site),
+                      size  = 3,
+                      width = 0.5) +
+      geom_smooth(method = "lm") +
+      geom_text_repel(aes(label = Sample),
+                      size = 5, 
+                      box.padding = 0.5,
+                      point.padding = 1
+                      ) +
+      scale_color_manual(values = site_colors) +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text = element_text(size = 14),
+            strip.text = element_text(size = 14,
+                                      face = "bold"),
+            legend.position = "none",
+            legend.key.height = unit(3, "cm"),
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
+      labs(x = "Elevation",
+           y = "Richness")
+    
+    shapiro.test(corr_richness_elevation$value)
+    
+ cor.test(corr_richness_elevation$value, 
+         corr_richness_elevation$Elevation, 
+         method = "spearman")
+
     ```
 
 ### Beta Diversity (Ordination)
