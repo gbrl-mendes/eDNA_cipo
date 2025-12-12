@@ -89,9 +89,6 @@ editor_options:
 
     # Retrieve full taxonomy from taxID
     source("/home/gabriel/functions/retrieve_taxonomy.R")
-    
-    # Update Characidae taxonomy
-    source("/home/gabriel/functions/update_characidae_taxonomy.R")
     ```
 
 -   **Define color palettes.** Set consistent color schemes for taxonomic groups and visualizations.
@@ -382,7 +379,7 @@ editor_options:
       filter(class == "Actinopteri") %>%
       select(order, family, genus) %>%
       reframe("Order (Curated ID)" = order,
-              "Family (Updated)" = family,
+              "Family (Curated ID)" = family,
               "Genus (Curated ID)" = genus) %>%
       na.omit()
 
@@ -391,15 +388,6 @@ editor_options:
       raw_curated_results %>% 
       left_join(curated_taxonomy_rdx,
                 by = join_by(`Genus (Curated ID)`))
-    ```
-
--   **Update Characidae Taxonomy** Use the `update_characidae_taxonomy` function to append the correct Family and Subfamily based on the reclassification by Melo et al. (2024) of taxa previously belonging to Characidae Family 
-
-    ```{r}
-    raw_curated_results <-
-      raw_curated_results %>% 
-      update_characidae_taxonomy(genus_col = "Genus (Curated ID)", 
-                                 species_col = "Curated ID")
     ```
 
 #### Final Filtering & Metadata Integration
@@ -486,7 +474,6 @@ editor_options:
              `Metadata 1`,
              `Curated ID`,
              ends_with("(Curated ID)"), 
-             `Family (Updated)`,
              `ASV header`) %>% 
       group_by(Sample) %>% 
       mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
@@ -494,7 +481,7 @@ editor_options:
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
       reframe("Order" = `Order (Curated ID)`,
-              "Family" = `Family (Updated)`,
+              "Family" = `Family (Curated ID)`,
               "Genus" = `Genus (Curated ID)`,
               "Taxon" = `Curated ID`,
               "Site" = `Metadata 1`,
@@ -513,7 +500,6 @@ editor_options:
              `Metadata 1`,
              `Curated ID`,
              ends_with("(Curated ID)"), 
-             `Family (Updated)`,
              `ASV header`) %>% 
       group_by(`Metadata 1`) %>% 
       mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
@@ -521,7 +507,7 @@ editor_options:
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
       reframe("Order" = `Order (Curated ID)`,
-              "Family" = `Family (Updated)`,
+              "Family" = `Family (Curated ID)`,
               "Genus" = `Genus (Curated ID)`,
               "Taxon" = `Curated ID`,
               "Site" = `Metadata 1`,
@@ -542,7 +528,6 @@ editor_options:
              `ASV absolute abundance`,
              `Metadata 1`,
              `Curated ID`,
-             `Family (Updated)`,
              ends_with("(Curated ID)")) %>% 
       group_by(Sample) %>% 
       mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
@@ -550,7 +535,7 @@ editor_options:
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
       reframe("Ordem" = `Order (Curated ID)`,
-              "Familia" = `Family (Updated)`,
+              "Familia" = `Family (Curated ID)`,
               "Genero" = `Genus (Curated ID)`,
               "Amostra" = Sample,
               "Local" = `Metadata 1`,
@@ -577,7 +562,7 @@ editor_options:
       mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
       ungroup() %>% 
       reframe("Order" = `Order (Curated ID)`,
-              "Family" = `Family (Updated)`,
+              "Family" = `Family (Curated ID)`,
               "Genus" = `Genus (Curated ID)`,
               "Site" = `Metadata 1`,
               "Taxon" = `Curated ID`,
@@ -934,7 +919,7 @@ traditional_longer %>%
       group_by(`Curated ID`, `Final ID (BLASTn)`, 
                `Metadata 1`, `Metadata 7`) %>%
       reframe("Taxon" = `Curated ID`,
-              "Família" = `Family (Updated)`,
+              "Família" = `Family (Curated ID)`,
               "Metadata 1" = `Metadata 1`,
               "Abundância" = sum(`ASV absolute abundance`),
               "Classe" = paste(unique(`Class (NCBI)`,
@@ -995,7 +980,7 @@ traditional_longer %>%
               "ASVs" = n_distinct(`ASV header`),
               "OTUs" = n_distinct(OTU),
               "Ordem" = n_distinct(`Order (Curated ID)`),
-              "Familias" = n_distinct(`Family (Updated)`),
+              "Familias" = n_distinct(`Family (Curated ID)`),
               "Generos" = n_distinct(`Genus (Curated ID)`),
               "Especies" = n_distinct(`Curated ID`[grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) 
                                                      & !grepl("sp\\.", `Curated ID`)]),
@@ -1013,7 +998,7 @@ traditional_longer %>%
               "Reads totais" = sum(`ASV absolute abundance`),
               "ASVs" = n_distinct(`ASV header`),
               "OTUs" = n_distinct(OTU),
-              "Familias" = n_distinct(`Family (Updated)`),
+              "Familias" = n_distinct(`Family (Curated ID)`),
               "Generos" = n_distinct(`Genus (Curated ID)`),
               "Especies" = n_distinct(`Curated ID`[grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) 
                                                      & !grepl("sp\\.", `Curated ID`)]),
@@ -1037,7 +1022,7 @@ traditional_longer %>%
         "ASVs"        = n_distinct(`ASV header`),
         "OTUs"        = n_distinct(OTU),
         "Ordem"       = n_distinct(`Order (Curated ID)`),
-        "Familias"    = n_distinct(`Family (Updated)`),
+        "Familias"    = n_distinct(`Family (Curated ID)`),
         "Generos"     = n_distinct(`Genus (Curated ID)`),
         "Especies"    = n_distinct(`Curated ID`[
                             grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) &
@@ -1057,10 +1042,10 @@ traditional_longer %>%
     family_stats <-
       curated_results %>%
       filter(`Class (NCBI)` == "Actinopteri") %>%
-      group_by(`Family (Updated)`) %>%
+      group_by(`Family (Curated ID)`) %>%
       reframe(
         "Ordem"       = `Order (Curated ID)`,
-        "Familia"     = `Family (Updated)`,
+        "Familia"     = `Family (Curated ID)`,
         "Reads totais"= sum(`ASV absolute abundance`),
         "ASVs"        = n_distinct(`ASV header`),
         "OTUs"        = n_distinct(OTU),
@@ -1071,7 +1056,7 @@ traditional_longer %>%
                           ]),
         "N-Especies"  = n_distinct(`Curated ID`) - Especies
       ) %>%
-      select(-`Family (Updated)`) %>%
+      select(-`Family (Curated ID)`) %>%
       unique() %>%
       print()
 
@@ -1331,12 +1316,12 @@ traditional_longer %>%
     # Define factor Locals for plot
     spp_levels <- 
       sort(unique(merged_methods_longer$Taxon))
-
+    
     # Create new Site colled Resumo
     merged_methods_summary <-
     merged_methods_longer %>% 
       mutate(Site = "Resumo")
-
+    
     # Plot
     tile_plot_methods <-
     merged_methods_longer %>%
@@ -1459,7 +1444,7 @@ traditional_longer %>%
                     SC2_count == 0 & SC3_count == 0 & 
                     SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
       ungroup()
-
+    
     spp_diff_sites
     ```
 
@@ -1533,7 +1518,7 @@ traditional_longer %>%
       labs(x = "samples",
            y = "richness")
 
-    # Export plot 
+    # Export plot for the paper
     # ggsave(file = paste0(figs_path,"/", "collector_plot_all",
     #                      "-", Sys.Date(), ".pdf", collapse = ""),
     #        plot = collector_plot_all, 
@@ -1552,11 +1537,11 @@ traditional_longer %>%
     ```{r}
     # SC1
     sc1_taxa_wider_jac <-
-    sample_taxa_wider_jac %>% 
+    taxa_sample_wider_jac %>% 
       filter(Local == "SC1")
 
     accum_sc1 <- 
-      specaccum(sc1_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+      specaccum(sc1_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
                 method = "random",
                 permutations = 999)
        
@@ -1568,11 +1553,11 @@ traditional_longer %>%
 
     # SC2
     sc2_taxa_wider_jac <-
-    sample_taxa_wider_jac %>% 
+    taxa_sample_wider_jac %>% 
       filter(Local == "SC2")
 
     accum_sc2 <- 
-      specaccum(sc2_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+      specaccum(sc2_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
                 method = "random",
                 permutations = 999)
        
@@ -1584,11 +1569,11 @@ traditional_longer %>%
 
     # SC3
     sc3_taxa_wider_jac <-
-    sample_taxa_wider_jac %>% 
+    taxa_sample_wider_jac %>% 
       filter(Local == "SC3")
 
     accum_sc3 <- 
-      specaccum(sc3_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+      specaccum(sc3_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
                 method = "random",
                 permutations = 999)
        
@@ -1600,11 +1585,11 @@ traditional_longer %>%
 
     #SC4
     sc4_taxa_wider_jac <-
-    sample_taxa_wider_jac %>% 
+    taxa_sample_wider_jac %>% 
       filter(Local == "SC4")
 
     accum_sc4 <- 
-      specaccum(sc4_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+      specaccum(sc4_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
                 method = "random",
                 permutations = 999)
        
@@ -1616,11 +1601,11 @@ traditional_longer %>%
 
     #SC5
     sc5_taxa_wider_jac <-
-    sample_taxa_wider_jac %>% 
+    taxa_sample_wider_jac %>% 
       filter(Local == "SC5")
 
     accum_sc5 <- 
-      specaccum(sc5_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+      specaccum(sc5_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
             method = "random",
                 permutations = 999)
        
@@ -1632,11 +1617,11 @@ traditional_longer %>%
 
     #SC6
     sc6_taxa_wider_jac <-
-    sample_taxa_wider_jac %>% 
+    taxa_sample_wider_jac %>% 
       filter(Local == "SC6")
 
     accum_sc6 <- 
-      specaccum(sc6_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+      specaccum(sc6_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
             method = "random",
                 permutations = 999)
        
@@ -1648,11 +1633,11 @@ traditional_longer %>%
 
     #SC7
     sc7_taxa_wider_jac <-
-    sample_taxa_wider_jac %>% 
+    taxa_sample_wider_jac %>% 
       filter(Local == "SC7")
 
     accum_sc7 <- 
-      specaccum(sc7_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+      specaccum(sc7_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
                 method = "random",
                 permutations = 999)
        
@@ -1729,9 +1714,9 @@ traditional_longer %>%
       rowwise() %>%
       reframe(Amostra,
               Local, 
-              Observed = specnumber(c_across(3:ncol(.))),
-             Shannon = diversity(c_across(3:ncol(.)), index = "shannon"),
-             Simpson = diversity(c_across(3:ncol(.)), index = "simpson")) %>%
+              Observed = specnumber(c_across(3:ncol(sample_taxa_wider))),
+             Shannon = diversity(c_across(3:ncol(sample_taxa_wider)), index = "shannon"),
+             Simpson = diversity(c_across(3:ncol(sample_taxa_wider)), index = "simpson")) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
                             Shannon, 
@@ -1745,9 +1730,9 @@ traditional_longer %>%
       site_taxa_wider %>%
       rowwise() %>%
       reframe(Site,
-              Observed = specnumber(c_across(2:ncol(.))),
-              Shannon = diversity(c_across(2:ncol(.)), index = "shannon"),
-              Simpson = diversity(c_across(2:ncol(.)), index = "simpson")) %>%
+              Observed = specnumber(c_across(2:ncol(site_taxa_wider))),
+              Shannon = diversity(c_across(2:ncol(site_taxa_wider)), index = "shannon"),
+              Simpson = diversity(c_across(2:ncol(site_taxa_wider)), index = "simpson")) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
                             Shannon, 
@@ -1761,9 +1746,9 @@ traditional_longer %>%
       traditional_wider %>%
       rowwise() %>%
       reframe(Site,
-              Observed = specnumber(c_across(2:ncol(.))),
-             Shannon = diversity(c_across(2:ncol(.)), index = "shannon"),
-             Simpson = diversity(c_across(2:ncol(.)), index = "simpson")
+              Observed = specnumber(c_across(2:ncol(traditional_wider))),
+             Shannon = diversity(c_across(2:ncol(traditional_wider)), index = "shannon"),
+             Simpson = diversity(c_across(2:ncol(traditional_wider)), index = "simpson")
              ) %>%
       ungroup() %>%
       pivot_longer(cols = c(Observed, 
@@ -1865,8 +1850,6 @@ traditional_longer %>%
 -   **Data preparation for ordination.** Create a wide-format table (**`Samples x Taxa`**) with RRA values for vegan ordination.
 
     ```{r}
-    #| eval: false
-    
     # Convert the long table to a wide format (Samples x IDs)
     taxa_sample_wider_PCoA <- 
       taxa_sample_longer %>%
@@ -1913,8 +1896,6 @@ traditional_longer %>%
 -   **Transform data.** Convert abundance matrices into distance matrices using Jaccard (presence/absence) or Bray-Curtis (abundance) indices.
 
     ```{r}
-    #| eval: false
-    
     # Filter data and create distance matrix
     taxa_sample_wider_PCoA <- 
       taxa_sample_wider_PCoA %>% 
@@ -1931,8 +1912,6 @@ traditional_longer %>%
 -   **Run ordination (PCoA/NMDS).** Perform Principal Coordinates Analysis to visualize compositional differences between sites.
 
     ```{r}
-    #| eval: false
-    
     pcOa <- cmdscale(pcOa_dist, 
                      eig = TRUE)
 
@@ -1944,8 +1923,6 @@ traditional_longer %>%
 -   **Fit environmental vectors.** Correlate environmental variables (e.g., elevation) with the ordination axes to interpret ecological drivers.
 
     ```{r}
-    #| eval: false
-    
     # Fit species vectors to the ordination
     meta.spp.fit <- envfit(pcOa, 
                            taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)], 
@@ -2015,8 +1992,6 @@ traditional_longer %>%
 -   **Plot ordination.** Generate scatter plots of the PCoA results, coloring points by Site or Method.
 
     ```{r}
-    #| eval: false
-    
     percent_pcOa <- pcOa$eig / sum(pcOa$eig) * 100
         
     cores <- c("High" = "#3381b1", 
@@ -2090,7 +2065,7 @@ traditional_longer %>%
       # scale_fill_manual(values = cores) +
       # scale_colour_manual(values = cores)
 
-    # Exporting plot
+    # Exporting plot for the paper
     ggsave(plot = PCoA_MCE_2, 
            filename = paste0(figs_path, "/PCoA_all", "-",
                              Sys.Date(), ".pdf", sep = ""),
