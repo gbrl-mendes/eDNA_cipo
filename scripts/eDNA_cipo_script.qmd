@@ -1162,7 +1162,7 @@ traditional_longer %>%
     #            scales = "free_x")
     ```
 
-### Heatmaps (Tile Plots)
+### Tile Plots
 
 #### eDNA Occurrence
 
@@ -1692,7 +1692,7 @@ traditional_longer %>%
     # Export plot 
     # ggsave(file = paste0(figs_path,"/", "collector_plot_all",
     #                      "-", Sys.Date(), ".pdf", collapse = ""),
-    #        plot = collector_plot_all, 
+    #        plot = collector_plot_sites, 
     #        width = 20, 
     #        height = 12, 
     #        units = "cm", 
@@ -1895,7 +1895,6 @@ traditional_longer %>%
  cor.test(corr_richness_elevation$value, 
          corr_richness_elevation$Elevation, 
          method = "spearman")
-
     ```
 
 ### Beta Diversity (Ordination)
