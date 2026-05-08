@@ -1763,7 +1763,7 @@ traditional_longer %>%
       alpha_traditional_tbl %>% 
       bind_rows(alpha_site_tbl) %>% 
       print()
-    
+
     # Bind row for Sample
     alpha_sample_methods <-
       alpha_traditional_tbl %>% 
@@ -1889,10 +1889,10 @@ traditional_longer %>%
                                       face = "bold")) +
       labs(x = "Elevation",
            y = "Richness")
-    
+
     shapiro.test(corr_richness_elevation$value)
-    
- cor.test(corr_richness_elevation$value, 
+
+     cor.test(corr_richness_elevation$value, 
          corr_richness_elevation$Elevation, 
          method = "spearman")
     ```
