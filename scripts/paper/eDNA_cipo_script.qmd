@@ -1,0 +1,2276 @@
+---
+title: "Análise de eDNA metabarcoding Cipó"
+author: "Gabriel A. Mendes"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+# Cipó's eDNA metabarcoding project
+
+## 1. Setup & Configuration
+
+### Packages
+
+-   **Load libraries.** Import all necessary packages for data manipulation, ecological analysis, and data visualization.
+
+    ```{r}
+    library("tidyverse")
+    library("Biostrings")
+    library("DECIPHER")
+    library("phyloseq")
+    library("vegan")
+    library("readxl")
+    library("writexl")
+    library("ggpubr")
+    library("ggplot2")
+    library("ggsignif")
+    library("ggrepel")
+    library("openxlsx")
+    library("colorspace")
+    library("ggalluvial")
+    ```
+
+### Directory Management
+
+-   **Create directory structure.** Define project paths and ensure folders for scripts, results, figures, and tables exist.
+
+    ```{r}
+    {
+      prjct_path <- "/home/gabriel/projetos/eDNA_cipo"
+      prjct_radical <- "eDNA_cipo"
+      scripts_path <- paste0(prjct_path, "/scripts")
+      results_path <- paste0(prjct_path, "/results")
+      figs_path <- paste0(results_path, "/figures")
+      tbl_path <- paste0(results_path, "/tables")
+      env_path <- paste0(prjct_path, "/environment")
+      data_path <- paste0(prjct_path, "/data")
+      paths <- c(scripts_path, results_path, figs_path, 
+             tbl_path, env_path, data_path)
+    }
+
+    for (dir in paths) {
+      if (dir.exists(dir)) {
+    print(paste("The folder", dir, "already exists!"))
+      } else {
+    print(paste("Creating", dir, "!" ))
+    dir.create(dir) 
+      }
+    }
+    ```
+
+### Housekeeping
+
+-   **Load helper functions.** Source external scripts for taxonomy retrieval and data transformation tasks.
+
+    ```{r}
+    # Function to handle character and numeric vectors when pivoting
+    sum_uniq <- function(vec) {
+      if (is.character(vec)) {
+        suniq <- BiocGenerics::unique(vec)
+      }
+      if (is.numeric(vec)) {
+        suniq <- sum(vec)
+      }
+      return(suniq)
+    }
+
+    # Binary function (presence/absence)
+    jaccarize <- function(x) {
+      ifelse(x == 0, 0, 1)
+      }
+    ```
+
+-   **Load custom functions.** Custom functions for taxonomy retrievel.
+
+    ```{r}
+    # Retrieve taxID
+    source("/home/gabriel/functions/retrieve_taxid.R")
+
+    # Retrieve full taxonomy from taxID
+    source("/home/gabriel/functions/retrieve_taxonomy.R")
+    ```
+
+-   **Define color palettes.** Set consistent color schemes for taxonomic groups and visualizations.
+
+    ```{r}
+    # Color palettes for each site 
+    site_colors <- c("SC1" = "#67322EFF", "SC2" = "#9C593EFF", "SC3" = "#DDA569FF", 
+                     "SC4" = "#3F4330FF", "SC5" = "#2C6B67FF", "SC6" = "#2A4866FF", 
+                     "SC7" = "#6592B0FF")
+
+    # Color palette for overall sample
+    all_colors <- c("#175449FF")
+
+    # Colors for each sampling method.
+    method_colors <- c("eDNA" = "#c4dfff", 
+                       "Tradicional" = "#99d09e")
+
+    # Create palletes
+    colors_base <- rev(c("#67322EFF","#9C593EFF","#DDA569FF","#3F4330FF",
+                         "#2C6B67FF","#2A4866FF","#6592B0FF"))
+
+    palette_function <- colorRampPalette(colors_base)
+
+    palette_full <- palette_function(200)
+
+    # 50 colors
+    index_colors_50 <- seq(1, 200, length.out = 50)
+
+    palette_50 <- palette_full[index_colors_50]
+
+    # 20 colors
+    index_colors_20 <- seq(1, 200, length.out = 20)
+
+    palette_20 <- palette_full[index_colors_20]
+
+    # 20 colors
+    index_colors_20 <- seq(1, 200, length.out = 20)
+
+    palette_20 <- palette_full[index_colors_20]
+
+    # 5 colors
+    index_colors_5 <- seq(1, 200, length.out = 5)
+
+    palette_5 <- palette_full[index_colors_5]
+    ```
+
+## 2. Data Processing: Metabarcoding Pipeline Raw Data
+
+### Stage 1: Raw Data Screening (Pre-analysis)
+
+#### Import Raw Data
+
+-   **Load raw results.** Import the full output table from the bioinformatics pipeline, converting empty strings to NA for consistency.
+
+    ```{r}
+    raw_pre_results <-
+      read.csv("/home/gabriel/projetos/eDNA_cipo/data/resultados_completos_cipo.csv",
+               sep = ",",
+               check.names = FALSE) %>%
+      mutate(`Metadata 1` = ifelse(`Metadata 1` == "", Sample,
+                                   `Metadata 1`),
+             `Class (NCBI)` = ifelse(`Class (NCBI)` == "", NA,
+                                     `Class (NCBI)`)) %>% 
+      as_tibble()
+    ```
+
+#### Pre-filtering & Quality Checks
+
+-   **Apply preliminary filters.** Remove ASVs outside the expected length (120–240 bp), non-target taxa (non-Actinopteri), and potential contaminants found in controls.
+
+    ```{r}
+    pre_results_filt <-
+      raw_pre_results %>%
+      filter(`Primer expected length` != "out of range",
+             `Final ID (BLASTn)` != "",
+             `Class (NCBI)` == "Actinopteri",
+             !Sample %in% c("SC_bColA", "SC_bExt_0802"),
+             `Contamination status` != "Possible contamination")
+
+    # Export table
+    # write_csv(pre_results_filt, 
+    #       paste0(tbl_path, "/table-pre_filt_raw_results", "-",
+    #              Sys.Date(), ".csv", sep = ""))
+    ```
+
+#### Assessment of Excluded Data
+
+-   **Isolate removed sequences.** Create a dataset of ASVs excluded during filtering to analyze what is being discarded.
+
+    ```{r}
+    # ASVs excluded from the dataset 
+    pre_data_diff <- 
+      dplyr::setdiff(raw_pre_results,
+                     pre_results_filt)
+
+    # Generate long-format list
+    pre_data_diff_longer <-
+      pre_data_diff %>%
+      select(Sample,
+             `Sample total abundance`,
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             `Final ID (BLASTn)`,
+             ends_with("(NCBI)"),
+             `ASV header`,
+             `ASV (Sequence)`) %>%
+      mutate("Sample abundance" = `Sample total abundance`) %>%
+      group_by(`Final ID (BLASTn)`, Sample) %>%
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>%
+      ungroup() %>%
+      mutate("RRA%" = round(Reads / `Sample total abundance` * 100, 3)) %>%
+      select(`Final ID (BLASTn)`,
+             Sample,
+             `Metadata 1`,
+             Reads,
+             `RRA%`,
+             `Sample abundance`,
+             `Genus (NCBI)`,
+             `Family (NCBI)`,
+             `Order (NCBI)`,
+             `Class (NCBI)`) %>% 
+      print()
+    ```
+
+-   **Summarize excluded data.** Calculate the relative abundance of excluded taxa per site to check for systematic biases (e.g., high non-target DNA in specific sites).
+
+    ```{r}
+    pre_diff_summ <- 
+    pre_data_diff_longer %>% 
+      group_by(`Metadata 1`) %>% 
+      mutate("Sample abundance" = sum(`Reads`)) %>% 
+      group_by(`Metadata 1`, `Class (NCBI)`) %>% 
+      reframe("Local" = `Metadata 1`,
+              "Classe" = `Class (NCBI)`,
+              "Abundância" = sum(Reads),
+              "%" = round(`Abundância` / `Sample abundance` * 100,
+                          digits = 3)) %>% 
+      unique() %>% 
+      pivot_wider(id_cols = Local,
+                 names_from = Classe,
+                 values_from = `%`) %>% 
+      relocate("Local", 
+               "Actinopteri", 
+               "Amphibia", 
+               "Aves", 
+               "Mammalia",
+               "Alphaproteobacteria", 
+               "Betaproteobacteria", 
+               "Terriglobia",
+               "NA") %>% 
+      print()
+    ```
+
+-   **Visualize excluded taxa.** Generate a tile plot of excluded ASVs to inspect the taxonomic composition of rejected data.
+
+    ```{r}
+     # Set species order for the plot
+    spp_levels <- 
+      sort(unique(pre_data_diff_longer$`Final ID (BLASTn)`))
+
+    # Plot
+    tile_plot_pre_diff <-
+    pre_data_diff_longer %>%
+      mutate(`Final ID (BLASTn)` = factor(`Final ID (BLASTn)`,
+                                          levels = rev(spp_levels)),
+             `Class (NCBI)` = ifelse(`Class (NCBI)` == "", NA, 
+                                     `Class (NCBI)`),
+             `Metadata 1` = ifelse(`Metadata 1` == "SC_bColA" | `Metadata 1` == "SC_bExt_0802", 
+                                   "Controles", 
+                                   `Metadata 1`)) %>% 
+      ggplot(aes(y = `Final ID (BLASTn)`,
+                 x = Sample,
+                 fill = `RRA%`)) +
+      geom_tile() +
+      facet_grid(cols = vars(`Metadata 1`),
+                 rows = vars(`Class (NCBI)`),
+                 space = "free",
+                 scales = "free",
+                 drop = TRUE) +
+      scale_fill_gradientn(name = "RRA (%)",
+                           colours = rev(c("#30123BFF",
+                                           "#4662D7FF",
+                                           "darkgreen",
+                                           "#72FE5EFF",
+                                           "#C7EF34FF",
+                                           "#FABA39FF",
+                                           "#F66B19FF",
+                                           "#CB2A04FF",
+                                           "#7A0403FF")),
+        values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5, 5, 10, 25, 50, 75, 100)),
+        breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00, 25.00, 50.00, 100.00),
+        labels = scales::number_format(accuracy = 0.01),
+        limits = c(0.01, 100),
+        na.value = "#7A0403FF",
+        trans = "log10") +
+        theme(panel.grid.major = element_line(color = "grey",
+                                              linewidth = 0.2,
+                                              linetype = 1),
+              axis.text.x = element_text(angle = 45,
+                                         vjust = 1,
+                                         hjust = 1,
+                                         size = 14),
+              axis.text.y = element_text(face = "italic",
+                                         size = 14),
+              strip.text.x = element_text(size = 14,
+                                          face = "bold"),
+              strip.text.y = element_text(angle = 0,
+                                          size = 14,
+                                          face = "bold"),
+              legend.position = "right",
+              legend.key.height = unit(3, "cm"),
+              axis.title.x = element_text(size = 16,
+                                          face = "bold"),
+              axis.title.y = element_text(size = 16,
+                                          face = "bold")) +
+      labs(fill = "%",
+           x = "Replicatas",
+           y = "Taxa")
+
+    # Export plot
+    # ggsave(plot = tile_plot_pre_diff,
+    #        filename = paste0(figs_path, "/tile_plot_pre_diff", "_",
+    #                          Sys.Date(), ".pdf"),
+    #        units = "cm",
+    #        height = 35,
+    #        width = 40,
+    #        dpi = 1200)
+
+    tile_plot_pre_diff
+    ```
+
+### Stage 2: Curated Data Refinement
+
+#### Import Curated Data & Taxonomies
+
+-   **Load curated dataset.** Import the manually verified dataset where taxonomic assignments have been corrected by experts.
+
+    ```{r}
+    raw_curated_results <-
+      read.csv(paste0(data_path, "/resultados_completos-eDNA_Cipo-301025.csv"), 
+               sep = ",",
+               check.names = FALSE) %>%
+      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>%
+      as_tibble()
+    ```
+
+#### Taxonomic Correction & Cleanup
+
+-   **Standardize taxonomy.** Correct specific inconsistent assignments (e.g., *Brycon* aff., *Rhamdia* aff.) and extract clean Genus/Family/Order levels from the curated IDs.
+
+    ```{r}
+    raw_curated_results <-
+      raw_curated_results %>%
+      mutate("Final ID (BLASTn)" =
+               ifelse(`Final ID (BLASTn)` %in% ("Brycon aff."), 
+                      "Brycon aff. devillei", `Final ID (BLASTn)`),
+             "Final ID (BLASTn)" =
+               ifelse(`Final ID (BLASTn)` %in% ("Rhamdia aff."),
+                      "Rhamdia aff. quelen", `Final ID (BLASTn)`),
+             "Genus (Curated ID)" = word(`Curated ID`, 1))
+    ```
+
+-   **Retrieve full taxonomy.** Use the `retrieve_taxonomy` function to fill in missing higher-level taxonomic ranks (Order, Family) based on the curated Genera.
+
+    ```{r}
+    # Extract genera
+    curated_genus <-
+      word(raw_curated_results$`Curated ID`, 1) %>%
+      na.omit() %>%
+      unique() 
+
+    # Retrive taxIDs
+    # taxids <- retrieve_taxid(curated_genus)
+
+    # Retrieve complete taxonomy
+    # curated_taxonomy <- retrieve_taxonomy(taxids)
+
+      # Select only necessary information
+    curated_taxonomy_rdx <-
+      curated_taxonomy %>%
+      filter(class == "Actinopteri") %>%
+      select(order, family, genus) %>%
+      reframe("Order (Curated ID)" = order,
+              "Family (Curated ID)" = family,
+              "Genus (Curated ID)" = genus) %>%
+      na.omit()
+
+    # Join curated taxonomy with original data
+    raw_curated_results <-
+      raw_curated_results %>% 
+      left_join(curated_taxonomy_rdx,
+                by = join_by(`Genus (Curated ID)`))
+    ```
+
+-   **Taxonomy corrections.** Change specific assignments based on recent taxonomic updates.
+
+    ```{r}
+    raw_curated_results <-
+      raw_curated_results %>%
+      mutate("Curated ID" =
+               ifelse(`Curated ID` %in% ("Megaleporinus obtusidens"), 
+                      "Arhinolemur obtusidens", `Curated ID`),
+             "Genus (Curated ID)" =
+               ifelse(`Genus (Curated ID)` %in% ("Megaleporinus"),
+                      "Arhinolemur", `Genus (Curated ID)`),
+             "Family (Curated ID)" =
+               ifelse(`Genus (Curated ID)` %in% ("Rhamdia"),
+                      "Heptapteridae", `Family (Curated ID)`))
+    ```
+
+#### Final Filtering & Metadata Integration
+
+-   **Apply final quality filters.** Filter the curated dataset for target amplicon length, fish specific classes (*Actinopteri*), and remove any remaining control contaminants.
+
+    ```{r}
+    curated_results_filt <-
+          raw_curated_results %>%
+          filter(`Primer expected length` != "out of range", # apenas na amplitude desejada
+                 `Final ID (BLASTn)` != "", # sem Locals sem identificacao
+                 `Class (NCBI)` == "Actinopteri", # apenas peixes
+                 !Sample %in% c("SC_bColA", "SC_bExt_0802"), # sem controles
+                 `Contamination status` != "Possible contamination", # sem contaminacoes
+                 `Metadata 7` == "ok") # apenas a nivel de genero e especie
+    ```
+
+-   **Select relevant columns.** Drop technical columns (e.g., PCR primer details, detailed BLAST stats) to create a clean analytical dataframe.
+
+    ```{r}
+    curated_results_rszd <-
+          curated_results_filt %>%
+          select(-c(Researcher, Project, Identification,
+                    `Identification Max. taxonomy`, Primer, `Read origin`,
+                    `Metadata 7`, `Metadata 8`, `Metadata 9`, `Metadata 10`,
+                    `Metadata 11`, `Metadata 12`,
+                    obs, `Primer expected length`, `Possible Metazoa`,
+                    `blast ID Origin`, `ID status`, `Contamination status`, 
+                    `ASV (Sequence)`, `PCR Control`, `Prop. to Ext control`,
+                    `Prop. to PCR control`, `Prop. to Filt control`, Type,
+                    `1_mismatches`, `1_gaps`, `1_query start`, 
+                    `1_query end`, `1_subject start`, `1_subject end`,
+                    `1_bitscore`, `2_mismatches`, `2_gaps`, `2_query start`,
+                    `2_query end`, `2_subject start`, `2_subject end`,
+                    `2_bitscore`, `3_mismatches`, `3_gaps`, `3_query start`,
+                    `3_query end`, `3_subject start`, `3_subject end`, 
+                    `3_bitscore`))
+    ```
+
+-   **Recalculate relative abundances.** Compute new relative abundance percentages (RRA) for each ASV based on the final filtered read counts per sample and site.
+
+    ```{r}
+    curated_results <-
+          curated_results_rszd %>%
+          group_by(Sample) %>%
+          mutate("Sample total abundance" = sum(`ASV absolute abundance`),
+                 "Relative abundance on sample" = `ASV absolute abundance`/ `Sample total abundance` * 100) %>%
+          group_by(`ASV header`, `Metadata 1`) %>% 
+          mutate("ASV site abundance" = sum(`ASV absolute abundance`)) %>% 
+          group_by(`Metadata 1`) %>% 
+          mutate("Site total abundance" = sum(`ASV site abundance`),
+                 "Relative abundance on site" = `ASV site abundance`/ `Site total abundance` * 100) %>%
+          relocate(`ASV header`, `Curated ID`, Sample, 
+                 `ASV absolute abundance`, `Relative abundance on sample`, `Sample total abundance`, 
+                 `ASV site abundance`, `Relative abundance on site`, `Site total abundance`) %>% 
+          ungroup()
+
+        # Export table
+        # write_csv(curated_results, 
+        #       paste0(tbl_path, "/table-filt_curated_results", "-",
+        #              Sys.Date(), ".csv", sep = ""))
+
+    curated_results
+    ```
+
+-   **Merge metadata.** Append environmental data (e.g., elevation, site codes) to the biological dataframe.
+
+    ```{r}
+    meta_data <-
+      tibble("Site" = c("SC1", "SC2", "SC3", "SC4", "SC5", "SC6", "SC7"),
+             "Elevation" = c(859, 812, 800, 1006, 784, 989, 752))
+    ```
+
+#### Data Shaping (Long/Wide Formats)
+
+-   **Create long-format tables.** Generate a "long" dataframe suitable for `ggplot2` plotting and detailed inspection of taxon per sample.
+
+    ```{r}
+    # Longer list grouped by sample
+    taxa_sample_longer <- 
+      curated_results %>%
+      select(Sample, 
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)"), 
+             `ASV header`) %>% 
+      group_by(Sample) %>% 
+      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, Sample) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              "Taxon" = `Curated ID`,
+              "Site" = `Metadata 1`,
+              Sample,
+              `Sample abundance`,
+              Reads,
+              "%" = round(Reads / `Sample abundance` * 100, 4)) %>%
+      unique() %>% 
+      print()
+
+    # Longer list grouped by site
+    taxa_site_longer <- 
+      curated_results %>%
+      select(Sample, 
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)"), 
+             `ASV header`) %>% 
+      group_by(`Metadata 1`) %>% 
+      mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, `Metadata 1`) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              "Taxon" = `Curated ID`,
+              "Site" = `Metadata 1`,
+              `Site abundance`,
+              Reads,
+              "%" = round(Reads / `Site abundance` * 100, 2)) %>%
+      unique() %>% 
+      print()
+    ```
+
+-   **Create wide-format matrices.** Generate a "site x species" matrix suitable for community analysis packages like `vegan` and `phyloseq`.
+
+    ```{r}
+    # Wider list grouped by sample (useful for detailed per-sample analysis)
+    sample_taxa_wider <- 
+    curated_results %>%
+      select(Sample, 
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)")) %>% 
+      group_by(Sample) %>% 
+      mutate("Sample abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, Sample) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              Sample,
+              "Site" = `Metadata 1`,
+              "Taxon" = `Curated ID`,
+              Reads,
+              "%" = round(Reads / `Sample abundance` * 100, 2)) %>% 
+      unique() %>% 
+      pivot_wider(id_cols = c(Site, Sample),
+                 names_from = Taxon,
+                 values_from = Reads) %>% 
+      mutate(across(c(3:ncol(.)), ~ replace_na(., 0))) %>% 
+      print()
+
+    # Wider list grouped by site (the primary matrix for vegan/phyloseq community analysis)
+    site_taxa_wider <- 
+    curated_results %>%
+      select(`ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             ends_with("(Curated ID)")) %>% 
+      group_by(`Metadata 1`) %>% 
+      mutate("Site abundance" = sum(`ASV absolute abundance`)) %>%
+      group_by(`Curated ID`, `Metadata 1`) %>% 
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>% 
+      ungroup() %>% 
+      reframe("Order" = `Order (Curated ID)`,
+              "Family" = `Family (Curated ID)`,
+              "Genus" = `Genus (Curated ID)`,
+              "Site" = `Metadata 1`,
+              "Taxon" = `Curated ID`,
+              Reads,
+              "%" = round(Reads / `Site abundance` * 100, 2)) %>% 
+      unique() %>% 
+      pivot_wider(id_cols = c(Site),
+                 names_from = Taxon,
+                 values_from = Reads) %>% 
+      mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+      print()
+    ```
+
+## 3. Data Processing: Traditional Survey
+
+### Import & Taxonomy Retrieval
+
+-   **Load traditional survey data.** Import the species list and abundance data from electrofishing/netting surveys.
+
+    ```{r}
+    traditional_results_raw <-
+      read.csv(paste0(data_path, "/coleta_tradicional-eDNA_cipo-171125.csv"),
+               sep = ",",
+               check.names = FALSE) %>%
+      mutate(across(everything(), ~ ifelse(. == "", NA, .))) %>%
+      as_tibble()
+    ```
+
+-   **Review taxonomy.** Ensure species names in the traditional dataset match the nomenclature used in the eDNA dataset to allow direct comparison.
+
+    ```{r}
+    # Retrieve curated genera
+    traditional_results <-
+      traditional_results_raw %>%
+      mutate("Genus" = word(Taxon, 1)) %>%
+      relocate(Taxon, Genus)
+
+    # Retrieve taxIDs
+    # taxids_trad <- retrieve_taxid(traditional_results$Genus)
+
+    # Retrieve complete taxonomy
+    curated_taxonomy_trad <- retrieve_taxonomy(taxids_trad)
+
+    # Select only necessary information
+    curated_taxonomy_trad_rdx <-
+      curated_taxonomy_trad %>%
+      filter(class == "Actinopteri") %>%
+      select(order, family, genus) %>%
+      reframe("Order" = order,
+              "Family" = family,
+              "Genus" = genus) %>%
+      na.omit()
+
+    # Join curated taxonomy with original data
+    traditional_results <-
+      traditional_results %>%
+      left_join(curated_taxonomy_trad_rdx,
+                by = join_by(Genus)) %>%
+      relocate(Order, Family, Genus, Taxon)
+    ```
+
+-   **Taxonomy corrections.** Change specific assignments based on recent taxonomic updates.
+
+    ```{r}
+    traditional_results <-
+      traditional_results %>%
+      mutate("Family" = ifelse(`Genus` %in% ("Rhamdia"),
+                      "Heptapteridae", `Family`),
+             "Family" = ifelse(`Genus` %in% ("Knodus"),
+                      "Acestrorhamphidae", `Family`))
+    ```
+
+### Data Shaping (Long/Wide Formats)
+
+-   **Create long-format tables.** Generate a "long" dataframe suitable for pivoting to wider format and merging with eDNA metabarcoding data.
+
+    ```{r}
+    traditional_longer <-
+    traditional_results %>% 
+      pivot_longer(cols = c("SC1", "SC2", "SC3", 
+                            "SC4", "SC6", "SC7"),
+                   names_to = "Site",
+                   values_to = "Ocurrence") %>% 
+      filter(!is.na(Ocurrence)) %>% 
+      mutate(Method = "Traditional")
+    ```
+
+-   **Create wide-format matrices.** Generate a "site x species" matrix suitable for community analysis packages like `vegan` and `phyloseq`.
+
+    ```{r}
+    # Wider list grouped by site
+    traditional_wider <- 
+    traditional_longer %>%
+      pivot_wider(id_cols = c(Site),
+                  names_from = Taxon,
+                  values_from = Ocurrence) %>% 
+      mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
+          print()
+```
+
+### Dataset Merging: eDNA + Traditional
+
+-   **Merge datasets.** Combine eDNA and traditional survey tables into a single `merged_methods` object, adding a "Method" column to distinguish sources.
+
+    ```{r}
+    #Longer format
+    merged_methods_longer <- 
+      taxa_site_longer %>% 
+      select(-c(`Site abundance`, `%`)) %>% 
+      rename(Reads = "Ocurrence") %>% 
+      mutate(Method = "Metabarcoding") %>% 
+      bind_rows(traditional_longer) %>% 
+      print()
+    ```
+
+-   **Export full species list of merged methods**
+
+    ```{r}
+    eDNA_traditional_methods_list <-
+    merged_methods_longer %>% 
+      select(-c(Site, Ocurrence)) %>% 
+      unique() %>% 
+      print()
+    
+    # Export table
+    # write.csv(eDNA_traditional_methods_list,
+    #           paste0(tbl_path, "/eDNA_traditional_methods_list", "-",
+    #                  Sys.Date(), ".csv", sep = ""))
+    ```
+
+-   **Taxonomy correction**
+
+    ```{r}
+    upd_eDNA_traditional_methods_list <-
+      read.csv(paste0(data_path, "/eDNA_traditional_methods_list-2026-05-12_corrigido.csv"), 
+               sep = ",",
+               check.names = FALSE) %>%
+      select(-c(1)) %>% 
+      as_tibble()
+    
+    anti_join(upd_eDNA_traditional_methods_list, eDNA_traditional_methods_list)
+    anti_join(eDNA_traditional_methods_list, upd_eDNA_traditional_methods_list)
+    ```
+
+
+## 4. Descriptive Statistics & Sequencing QC
+
+### Read Evolution (Tracking & Attrition)
+
+-   **Track read counts.** Calculate the total number of reads surviving each step of the pipeline (Raw $\to$ Pre-filter $\to$ Curated).
+
+    ```{r}
+    # Import raw read counts
+    seq_read_counts <- 
+      read.csv("/home/gabriel/projetos/eDNA_cipo/data/reads_n_seq_counts_eDNA_cipo.csv",
+               sep = ",",
+               check.names = FALSE) %>%
+      as_tibble() %>% 
+      summarise("Total reads" = sum(`Raw reads (pairs)`)) %>% 
+      print()
+
+    # Reads surviving raw pipeline
+    raw_resume <-
+      raw_pre_results %>% 
+      reframe("Total reads" = sum(`ASV absolute abundance`),
+              "ASVs" = n_distinct(`ASV header`)
+              ) %>% 
+      unique() %>% 
+      print()
+
+    # Reads surviving pre-filtering
+    raw_resume_pre_filt <- 
+      pre_results_filt %>% 
+      reframe("Total reads" = sum(`ASV absolute abundance`),
+              "ASVs" = n_distinct(`ASV header`)) %>% 
+      unique() %>% 
+      print()
+
+    # Reads surviving curation
+    curated_resume <-
+      curated_results_filt %>% 
+      reframe("Reads totais" = sum(`ASV absolute abundance`),
+              "ASVs" = n_distinct(`ASV header`)) %>% 
+      unique() %>% 
+      print()
+
+    # Summary table
+    summary_reads <- tibble(
+      Stage = c("Sequencing", "Raw pipeline", "Pre-filter", "Curated"),
+      Total = c(seq_read_counts$`Total reads`,
+                sum(raw_resume$`Total reads`),
+                sum(raw_resume_pre_filt$`Total reads`),
+                sum(curated_resume$`Reads totais`))) %>% 
+    print()
+    ```
+
+-   **Summarize sample-level attrition.** Generate a table showing read loss per individual sample to identify potentially failed libraries.
+
+    ```{r}
+    # Raw reads per sample
+    seq_read_counts_sample <- 
+      read.csv("/home/gabriel/projetos/eDNA_cipo/data/reads_n_seq_counts_eDNA_cipo.csv",
+               sep = ",",
+               check.names = FALSE) %>%
+      as_tibble() %>% 
+      group_by(Sample) %>% 
+      reframe("Total reads" = sum(`Raw reads (pairs)`)) %>% 
+      print()
+
+    # Reads per sample after pipeline
+    raw_resume_sample <-
+      raw_pre_results  %>%
+      group_by(Sample) %>%
+      reframe("Reads_Pipeline" = sum(`ASV absolute abundance`))
+
+    # Reads per sample after pre-filter
+    raw_resume_pre_filt_sample <-
+      pre_results_filt  %>%
+      group_by(Sample) %>%
+      reframe("Reads_PreFilter" = sum(`ASV absolute abundance`))
+
+    # Reads per sample after curation
+    curated_resume_sample <-
+      curated_results_filt  %>%
+      group_by(Sample) %>%
+      reframe("Reads_Curated" = sum(`ASV absolute abundance`))
+
+    # Joined summary table
+    summary_reads_sample <-
+      seq_read_counts_sample %>%
+      rename(`Total reads`= "Raw_Reads") %>%
+      left_join(raw_resume_sample, by = "Sample") %>%
+      left_join(raw_resume_pre_filt_sample, by = "Sample") %>%
+      left_join(curated_resume_sample, by = "Sample") %>%
+      print()
+    ```
+
+### Excluded Identifications
+
+-   **Summary of removed data.** Displays sequence abundance by taxonomic class in each site
+
+    ```{r}
+    # Removed ASVs from the curated dataset
+    data_diff <- 
+      dplyr::setdiff(raw_curated_results,
+                     curated_results_filt)
+
+    # Longer format table
+    data_diff_longer <-
+      data_diff %>%
+      select(Sample,
+             `Sample total abundance`,
+             `ASV absolute abundance`,
+             `Metadata 1`,
+             `Curated ID`,
+             `Final ID (BLASTn)`,
+             ends_with("(NCBI)"),
+             `ASV header`,
+             `ASV (Sequence)`) %>%
+      mutate("Sample abundance" = `Sample total abundance`) %>%
+      group_by(`Final ID (BLASTn)`, Sample) %>%
+      mutate("Reads" = sum(`ASV absolute abundance`)) %>%
+      ungroup() %>%
+      mutate("RRA%" = round(Reads / `Sample total abundance` * 100, 
+                            3)) %>%
+      select(`Final ID (BLASTn)`,
+             Sample,
+             `Metadata 1`,
+             Reads,
+             `RRA%`,
+             `Sample abundance`,
+             `Genus (NCBI)`,
+             `Family (NCBI)`,
+             `Order (NCBI)`,
+             `Class (NCBI)`) %>%
+      unique() %>% 
+      print()
+
+    # Summary of removed data by site
+    data_diff_summ <- 
+      data_diff_longer %>% 
+      group_by(`Metadata 1`) %>% 
+      mutate("Sample abundance" = sum(`Reads`)) %>% 
+      group_by(`Metadata 1`, `Class (NCBI)`) %>% 
+      reframe("Local" = `Metadata 1`,
+          "Classe" = `Class (NCBI)`,
+          "Abundância" = sum(Reads),
+          "%" = round(`Abundância` / `Sample abundance` * 100,
+                      digits = 3)) %>% 
+      unique() %>% 
+      pivot_wider(id_cols = Local,
+              names_from = Classe,
+              values_from = `%`) %>% 
+      relocate("Local",
+               "Actinopteri",
+               "Amphibia",
+               "Aves",
+               "Mammalia",
+               "Alphaproteobacteria",
+               "Betaproteobacteria",
+               "Terriglobia",
+               "NA") %>% 
+      print()
+    ```
+
+-   **Visualize identifications removed from dataset.** Create a tile plot showing the relative abundance (log scale) of each identification removed from the final dataset.
+
+    ```{r}
+    # Define factor Locals for plot
+    spp_levels <- 
+      sort(unique(data_diff_longer$`Final ID (BLASTn)`))
+
+    # Plot
+    tile_plot_diff <-
+    data_diff_longer %>%
+      mutate(`Final ID (BLASTn)` = factor(`Final ID (BLASTn)`, levels = rev(spp_levels)),
+             `Class (NCBI)` = ifelse(`Class (NCBI)` == "", NA, `Class (NCBI)`),
+             `Metadata 1` = ifelse(`Metadata 1` == "SC_bColA" | `Metadata 1` == "SC_bExt_0802", "Controles", `Metadata 1`)) %>% 
+      ggplot(aes(y = `Final ID (BLASTn)`,
+                 x = Sample,
+                 fill = `RRA%`)) +
+      geom_tile() +
+      facet_grid(cols = vars(`Metadata 1`),
+                 rows = vars(`Class (NCBI)`),
+                 space = "free",
+                 scales = "free",
+                 drop = TRUE) +
+      scale_fill_gradientn(name = "RRA (%)",
+                           colours = rev(c("#30123BFF",
+                                           "#4662D7FF",
+                                           "darkgreen",
+                                           "#72FE5EFF",
+                                           "#C7EF34FF",
+                                           "#FABA39FF",
+                                           "#F66B19FF",
+                                           "#CB2A04FF",
+                                           "#7A0403FF")),
+        values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5,
+                                   5, 10, 25, 50, 75, 100)),
+        breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00,
+                   25.00, 50.00, 100.00),
+        labels = scales::number_format(accuracy = 0.01),
+        limits = c(0.01, 100),
+        na.value = "#7A0403FF",
+        trans = "log10") +
+        theme(panel.grid.major = element_line(color = "grey",
+                                        linewidth = 0.2,
+                                        linetype = 1),
+              axis.text.x = element_text(angle = 45,
+                                         vjust = 1,
+                                         hjust = 1,
+                                         size = 14),
+              axis.text.y = element_text(face = "italic",
+                                         size = 14),
+              strip.text.x = element_text(size = 14,
+                                          face = "bold"),
+              strip.text.y = element_text(angle = 0,
+                                          size = 14,
+                                          face = "bold"),
+              legend.position = "right",
+              legend.key.height = unit(3, "cm"),
+              axis.title.x = element_text(size = 16,
+                                          face = "bold"),
+              axis.title.y = element_text(size = 16,
+                                          face = "bold")) +
+      labs(fill = "%",
+           x = "Replicatas",
+           y = "Taxa")
+
+    # Export plot
+    # ggsave(plot = tile_plot_diff,
+    #        filename = paste0(figs_path, "/tile_plot_exc", "_",
+    #                          Sys.Date(), ".pdf"),
+    #        units = "cm",
+    #        height = 20,
+    #        width = 42,
+    #        dpi = 1200)
+
+    tile_plot_diff
+    ```
+
+-   **Tabulate removal reasons.** Create a summary table listing why specific ASVs were discarded (e.g., "Sequence length outliers", "Control contamination").
+
+    ```{r}
+    # Calculate total abundance per site
+    sample_abd <-
+      raw_curated_results %>%
+      group_by(`Metadata 1`) %>%
+      summarize(total_abundance = sum(`ASV absolute abundance`, 
+                                      na.rm = TRUE)) %>% 
+      print()
+
+    motiv_data_diff <-
+      data_diff %>%
+      group_by(`Curated ID`, `Final ID (BLASTn)`, 
+               `Metadata 1`, `Metadata 7`) %>%
+      reframe("Taxon" = `Curated ID`,
+              "Família" = `Family (Curated ID)`,
+              "Metadata 1" = `Metadata 1`,
+              "Abundância" = sum(`ASV absolute abundance`),
+              "Classe" = paste(unique(`Class (NCBI)`,
+                               collapse = ", ")),
+              "Motivo" = paste(unique(c(
+                if (any(is.na(`Final ID (BLASTn)`))) "ID é NA",
+                if (any(`Contamination status` %in% 
+                        "Possible contamination"))
+                  "Contaminação",
+                if (any(`Primer expected length` %in% 
+                        "out of range"))
+                  "Amplicon fora do tamanho",
+                if (any((`Class (NCBI)` != "Actinopteri" & 
+                         !is.na(`Class (NCBI)`))))
+                  paste("Classe:", `Class (NCBI)`),
+                if (any(str_detect(Sample, "SC_bC")))
+                  "Controle de coleta",
+                if (any(str_detect(Sample, "SC_bExt")))
+                  "Controle de extração",
+                if (any(`Metadata 7` %in% "remover"))
+                    "ID imprecisa")),
+                  collapse = "; ")) %>%
+      left_join(sample_abd, 
+                by = "Metadata 1") %>%
+      mutate("%" = round( `Abundância` / total_abundance * 100,
+                             digits = 3)) %>%
+      select(Classe,
+             `Família`,
+             Taxon,
+             `Final ID (BLASTn)`,
+             `Abundância`,
+             `%`,
+             `Metadata 1`,
+             Motivo) %>%
+      rename(`Metadata 1` = "Local") %>% 
+      arrange(desc(`%`)) %>%
+      unique() %>% 
+      print()
+
+    # Export table 
+    # write.csv(motiv_data_diff,
+    #           paste0(tbl_path, "/motiv_data_removed", "-",
+    #                  Sys.Date(), ".csv", sep = ""))
+    ```
+
+### Taxonomic Coverage Summary
+
+-   **Calculate taxonomic metrics.** Count the total number of unique Orders, Families, Genera, and Species identified in the final dataset.
+
+    ```{r}
+    # Metrics per Site
+    site_stats <-
+      curated_results %>%
+      filter(`Class (NCBI)` == "Actinopteri") %>% 
+      group_by(`Metadata 1`) %>%
+      reframe("Local" = `Metadata 1`,
+              "Reads totais" = sum(`ASV absolute abundance`),
+              "ASVs" = n_distinct(`ASV header`),
+              "OTUs" = n_distinct(OTU),
+              "Ordem" = n_distinct(`Order (Curated ID)`),
+              "Familias" = n_distinct(`Family (Curated ID)`),
+              "Generos" = n_distinct(`Genus (Curated ID)`),
+              "Especies" = n_distinct(`Curated ID`[grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) 
+                                                     & !grepl("sp\\.", `Curated ID`)]),
+              "N-Especies" = n_distinct(`Curated ID`) - Especies ) %>%
+      select(-c(`Metadata 1`)) %>% 
+      unique() %>% 
+      print()
+
+    # Metrics per Order
+    order_stats <-
+      curated_results %>%
+      filter(`Class (NCBI)` == "Actinopteri") %>% 
+      group_by(`Order (Curated ID)`) %>%
+      reframe("Ordem" = `Order (Curated ID)`,
+              "Reads totais" = sum(`ASV absolute abundance`),
+              "ASVs" = n_distinct(`ASV header`),
+              "OTUs" = n_distinct(OTU),
+              "Familias" = n_distinct(`Family (Curated ID)`),
+              "Generos" = n_distinct(`Genus (Curated ID)`),
+              "Especies" = n_distinct(`Curated ID`[grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) 
+                                                     & !grepl("sp\\.", `Curated ID`)]),
+              "N-Especies" = n_distinct(`Curated ID`) - Especies ) %>%
+      select(-c(`Order (Curated ID)`)) %>% 
+      unique() %>% 
+      print()
+    ```
+
+-   **Tabulate taxon counts.** Generate summary tables of species richness per Site and per Family.
+
+    ```{r}
+    # Per Site
+    site_stats <-
+      curated_results %>%
+      filter(`Class (NCBI)` == "Actinopteri") %>%
+      group_by(`Metadata 1`) %>%
+      reframe(
+        "Local"       = `Metadata 1`,
+        "Reads totais"= sum(`ASV absolute abundance`),
+        "ASVs"        = n_distinct(`ASV header`),
+        "OTUs"        = n_distinct(OTU),
+        "Ordem"       = n_distinct(`Order (Curated ID)`),
+        "Familias"    = n_distinct(`Family (Curated ID)`),
+        "Generos"     = n_distinct(`Genus (Curated ID)`),
+        "Especies"    = n_distinct(`Curated ID`[
+                            grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) &
+                            !grepl("sp\\.", `Curated ID`)
+                          ]),
+        "N-Especies"  = n_distinct(`Curated ID`) - Especies
+      ) %>%
+      select(-`Metadata 1`) %>%
+      unique() %>%
+      print()
+
+    # Export table
+    # write.csv(site_stats,   
+    # paste0(tbl_path, "/site_stats-",   Sys.Date(), ".csv"))
+
+    # Per Family
+    family_stats <-
+      curated_results %>%
+      filter(`Class (NCBI)` == "Actinopteri") %>%
+      group_by(`Family (Curated ID)`) %>%
+      reframe(
+        "Ordem"       = `Order (Curated ID)`,
+        "Familia"     = `Family (Curated ID)`,
+        "Reads totais"= sum(`ASV absolute abundance`),
+        "ASVs"        = n_distinct(`ASV header`),
+        "OTUs"        = n_distinct(OTU),
+        "Generos"     = n_distinct(`Genus (Curated ID)`),
+        "Especies"    = n_distinct(`Curated ID`[
+                            grepl("^[A-Za-z]+\\s[A-Za-z]+$", `Curated ID`) &
+                            !grepl("sp\\.", `Curated ID`)
+                          ]),
+        "N-Especies"  = n_distinct(`Curated ID`) - Especies
+      ) %>%
+      select(-`Family (Curated ID)`) %>%
+      unique() %>%
+      print()
+
+    # Export table
+    # write.csv(family_stats, 
+    # paste0(tbl_path, "/family_stats-", Sys.Date(), ".csv"))
+    ```
+
+### Final Species Checklists
+
+-   **Classify identification levels.** Categorize identifications into Species-level, Genus-level (*sp.*), and tentative (*cf./ aff.*) for the final report.
+
+    ```{r}
+    # Species level
+    spp_site <- 
+      curated_results$`Curated ID` %>%
+      unique() %>%
+      .[grepl("^[A-Za-z]+\\s[A-Za-z]+$", .) & !grepl("sp\\.", .)]
+
+    # Genus level
+    nspp_site <- 
+      curated_results$`Curated ID` %>%
+      unique() %>%
+      .[grepl("^[A-Za-z]+\\s+sp\\.", .)]
+
+    # Affinis IDs
+    aff_ids <-
+      curated_results$`Curated ID` %>%
+      unique() %>%
+      setdiff(c(spp_site, nspp_site))
+
+    # Combine all into one data frame
+    spp_tax_levels <-
+    list(especie = spp_site,
+         genero_sp = nspp_site,
+         affinis   = aff_ids) %>%
+      tibble::enframe(name = "nivel", value = "taxa") %>%
+      tidyr::unnest_longer(taxa) %>%
+      dplyr::rename(taxon = taxa) %>% 
+      print()
+    ```
+
+-   **Identify singletons.** List species represented by only a single ASV or found in only one sample (potential false positives).
+
+    ```{r}
+    # Singleton occurrences per sample.
+    counts_sample <- 
+      curated_results %>%
+      group_by(`Curated ID`) %>%
+      reframe(count = n_distinct(Sample),
+              Sample) %>% 
+      unique()
+
+    unique_counts_sample <- 
+      counts_sample %>% 
+      filter(count == 1) %>% 
+      reframe(`Curated ID`,
+              Sample) %>% 
+      print()
+
+    # Singleton occurrences per site
+    counts_site <- 
+      curated_results %>%
+      group_by(`Curated ID`) %>%
+      reframe(count = n_distinct(`Metadata 1`),
+              `Metadata 1`) %>% 
+      unique()
+
+    unique_counts_site <- 
+      counts_site %>% 
+      filter(count == 1) %>% 
+      reframe(`Curated ID`,
+              `Metadata 1`) %>% 
+      print()
+    ```
+
+## 5. Ecological Analysis: Community Composition
+
+### Compositional Bar Plots
+
+-   **Plot relative abundance.** Generate stacked bar plots showing the taxonomic composition (Order/Family) of each site for each method.
+
+    ```{r}
+    merged_methods_longer %>%
+      # count(Site, Method, Order) %>%
+      count(Site, Method, Order, Family) %>%
+      group_by(Site, Method) %>%
+      mutate(proportion = n / sum(n)) %>% 
+      ggplot(aes(x = Site,
+                 y = proportion,
+                 # fill = Order,
+                 fill = Family,
+                 width = 0.95)) +
+      geom_bar(stat = "identity",
+               position = "stack") +
+      facet_grid(cols = vars(Method),
+                 rows = vars(Order),
+                 scales = "free") +
+      # scale_fill_manual(values = palette_5)
+      scale_fill_manual(values = palette_20)
+    # +
+    # facet_grid(cols = vars(Site),
+    #            scales = "free_x")
+    ```
+
+### Tile Plots
+
+#### eDNA Occurrence
+
+-   **Visualize species distribution for sample.** Create a tile plot showing the relative abundance (log scale) of each species.
+
+    ```{r}
+    # Define factor Locals for plot
+    spp_levels <- 
+      sort(unique(taxa_sample_longer$Taxon))
+
+    # Plot
+    tile_plot_sample <-
+    taxa_sample_longer %>%
+      mutate(Taxon = factor(Taxon,
+                            levels = rev(spp_levels))) %>%  
+      ggplot(aes(y = Taxon,
+                 x = Sample,
+                 fill = `%`)) +
+      geom_tile() +
+      facet_grid(cols = vars(Site),
+                 rows = vars(Family),
+                 space = "free",
+                 scales = "free",
+                 drop = TRUE) +
+      scale_fill_gradientn(name = "%",
+                          colours = rev(c("#30123BFF",
+                                          "#4662D7FF",
+                                          "darkgreen",
+                                          "#72FE5EFF",
+                                          "#C7EF34FF",
+                                          "#FABA39FF",
+                                          "#F66B19FF",
+                                          "#CB2A04FF",
+                                          "#7A0403FF")),
+                          values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5,
+                                                     5, 10, 25, 50, 75, 100)),
+                          breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00,
+                                     25.00, 50.00, 100.00),
+                          labels = scales::number_format(accuracy = 0.01),
+                          limits = c(0.01, 100),
+                          na.value = "#7A0403FF",
+                          trans = "log10") +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text.x = element_text(angle = 45,
+                                       vjust = 1,
+                                       hjust = 1,
+                                       size = 14),
+            axis.text.y = element_text(face = "italic",
+                                       size = 14),
+            strip.text.x = element_text(size = 14,
+                                        face = "bold"),
+            strip.text.y = element_text(angle = 0,
+                                        size = 14,
+                                        face = "bold"),
+            legend.position = "right",
+            legend.key.height = unit(3, "cm"),
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
+      labs(fill = "%",
+           x = "Replicatas",
+           y = "Taxa")
+
+    # Export plot
+    # ggsave(plot = tile_plot_sample,
+    #        filename = paste0(figs_path, "/tile_plot_sample", "_",
+    #                          Sys.Date(), ".pdf"),
+    #        units = "cm",
+    #        height = 35,
+    #        width = 35,
+    #        dpi = 1200)
+
+    tile_plot_sample
+    ```
+
+-   **Visualize species distribution for sampling site.** Create a tile plot showing the relative abundance (log scale) of each species across all sampling sites
+
+    ```{r}
+    # Define factor Locals for plot
+    spp_levels <- 
+      sort(unique(taxa_sample_longer$Taxon))
+
+    # Plot
+    tile_plot_site <-
+    taxa_sample_longer %>%
+      mutate(Taxon = factor(Taxon,
+                            levels = rev(spp_levels))) %>%  
+      ggplot(aes(y = Taxon,
+                 x = Site,
+                 fill = `%`)) +
+      geom_tile() +
+      facet_grid(rows = vars(Family),
+                 space = "free",
+                 scales = "free",
+                 drop = TRUE) +
+      scale_fill_gradientn(name = "%",
+                           colours = rev(c("#30123BFF",
+                                           "#4662D7FF",
+                                           "darkgreen",
+                                           "#72FE5EFF",
+                                           "#C7EF34FF",
+                                           "#FABA39FF",
+                                           "#F66B19FF",
+                                           "#CB2A04FF",
+                                           "#7A0403FF")),
+        values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5,
+                                   5, 10, 25, 50, 75, 100)),
+        breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00,
+                   25.00, 50.00, 100.00),
+        labels = scales::number_format(accuracy = 0.01),
+        limits = c(0.01, 100),
+        na.value = "#7A0403FF",
+        trans = "log10") +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text.x = element_text(size = 14),
+            axis.text.y = element_text(face = "italic",
+                                       size = 14),
+            strip.text.x = element_text(size = 14,
+                                        face = "bold"),
+            strip.text.y = element_text(angle = 0,
+                                        size = 14,
+                                        face = "bold"),
+            legend.position = "right",
+            legend.key.height = unit(3, "cm"),
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
+      labs(fill = "%",
+           x = "Ponto amostral",
+           y = "Taxa")
+
+    # Export plot
+    # ggsave(plot = tile_plot_site,
+    #        filename = paste0(figs_path, "/tile_plot_site", "_",
+    #                          Sys.Date(), ".png"),
+    #        units = "cm",
+    #        height = 35,
+    #        width = 25,
+    #        dpi = 600)
+
+    tile_plot_site
+    ```
+
+#### Method Comparison (eDNA vs Traditional)
+
+-   **Compare detection methods.** Generate a comparative heatmap contrasting species detected by eDNA versus traditional methods side-by-side.
+
+    ```{r}
+    # Define factor Locals for plot
+    spp_levels <- 
+      sort(unique(merged_methods_longer$Taxon))
+
+    # Create new Site colled Resumo
+    merged_methods_summary <-
+    merged_methods_longer %>% 
+      mutate(Site = "Resumo")
+
+    # Plot
+    tile_plot_methods <-
+    merged_methods_longer %>%
+      filter(Site != "SC5") %>% 
+      dplyr::bind_rows(merged_methods_summary) %>%
+      mutate(Taxon = factor(Taxon,
+                            levels = rev(spp_levels)),
+             Method = ifelse(Method == "Metabarcoding",
+                             "eDNA",
+                             "Tradicional")) %>%  
+      ggplot(aes(y = Taxon,
+                 x = Method,
+                 fill = Method)) +
+      geom_tile(color = "#858585", size = 0.1) +
+      facet_grid(cols = vars(Site),
+                 rows = vars(Family),
+                 space = "free",
+                 scales = "free",
+                 drop = TRUE) +
+      scale_fill_manual(values = method_colors) +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text.x = element_text(size = 14, 
+                                       angle = 45,
+                                       hjust = 1),
+            axis.text.y = element_text(face = "italic",
+                                       size = 14),
+            strip.text.x = element_text(size = 14,
+                                        face = "bold"),
+            strip.text.y = element_text(angle = 0,
+                                        size = 14,
+                                        face = "bold"),
+            legend.position = "none",
+            legend.key.height = unit(3, "cm"),
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
+      labs(x = "Método",
+           y = "Taxa")
+
+    # Export plot
+    # ggsave(plot = tile_plot_methods,
+    #        filename = paste0(figs_path, "/tile_plot_methods", "_",
+    #                          Sys.Date(), ".png"),
+    #        units = "cm",
+    #        height = 50,
+    #        width = 35,
+    #        dpi = 600)
+
+    tile_plot_methods
+    ```
+
+### Set Analysis (Venn Diagrams)
+
+-   **Calculate overlaps.** Use Venn diagrams or UpSet plots to show species shared between methods and unique to each approach.
+
+    ```{r}
+    # Common species between eDNA and Traditional Methods
+    spp_comm <- 
+      merged_methods_longer %>%
+      group_by(Taxon) %>%
+      summarise(n_Level = n_distinct(Method)) %>%
+      filter(n_Level >= 2) %>%
+      select(Taxon)
+
+    spp_comm
+        
+    # Exclusive species to eDNA and Traditional Methods
+    spp_diff <- 
+      merged_methods_longer %>%
+      group_by(Taxon) %>%
+      summarise(eDNA_count = sum(as.integer(Method == "Metabarcoding")),
+                Traditional_count = sum(as.integer(Method == "Traditional")),
+                eDNA_only = eDNA_count >= 1 & Traditional_count == 0,
+                Traditional_only = eDNA_count == 0 & Traditional_count >= 1) %>%
+      ungroup()
+          
+    spp_diff
+
+    # Common species across all sites
+    spp_comm_sites <-
+      merged_methods_longer %>%
+      group_by(Taxon) %>%
+      summarise(n_Sites = n_distinct(Site)) %>%
+      filter(n_Sites == 4) %>%
+      select(Taxon)
+
+    spp_comm_sites
+        
+    # Exclusive species to each sample site
+    spp_diff_sites <- 
+      merged_methods_longer %>%
+      group_by(Taxon) %>%
+      summarise(SC1_count = sum(as.integer(Site == "SC1")),
+                SC2_count = sum(as.integer(Site == "SC2")),
+                SC3_count = sum(as.integer(Site == "SC3")),
+                SC4_count = sum(as.integer(Site == "SC4")),
+                SC5_count = sum(as.integer(Site == "SC5")),
+                SC6_count = sum(as.integer(Site == "SC6")),
+                SC7_count = sum(as.integer(Site == "SC7")),
+                SC1_only = SC1_count >= 1 & SC2_count == 0 &
+                  SC3_count == 0 & SC4_count == 0 &
+                  SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+                SC2_only = SC2_count >= 1 & SC1_count == 0 & 
+                    SC3_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+                SC3_only = SC3_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC4_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+                SC4_only = SC4_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC5_count == 0 & SC6_count == 0 & SC7_count == 0,
+                SC5_only = SC5_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC6_count == 0 & SC7_count == 0,
+                SC6_only = SC6_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC5_count == 0 & SC7_count == 0,
+                SC7_only = SC7_count >= 1 & SC1_count == 0 & 
+                    SC2_count == 0 & SC3_count == 0 & 
+                    SC4_count == 0 & SC5_count == 0 & SC6_count == 0) %>%
+      ungroup()
+
+    spp_diff_sites
+    ```
+
+### Alluvial Plots
+
+```{r}
+# Define factor Locals for plot
+# spp_levels <- 
+#   sort(unique(taxa_sample_longer$Taxon))
+# 
+# taxa_sample_wider
+
+# Convert the long table to a wide format (IDs & Samples x Sites)
+taxa_sample_wider_alluvial <- 
+  taxa_sample_longer %>%
+  select(c(Site, 
+           Sample,
+           Taxon,
+           `%`)) %>%
+  pivot_wider(id_cols = c(Taxon,
+                          Sample),
+              names_from = Site,
+              values_from = `%`,
+              values_fn = sum_uniq,
+              names_sort = TRUE) %>%
+  mutate_all(~replace(., is.na(.), 0)) %>% 
+  relocate(c(Taxon,
+             Sample)) %>%
+  print()
+
+# Plot
+alluvial_plot_site <-
+taxa_sample_wider_alluvial %>%
+  mutate(Taxon = factor(Taxon,
+                        levels = rev(spp_levels))) %>%  
+  ggplot(aes(y = Taxon,
+             axis1 = SC1, axis2 = SC2, axis3 = SC3, axis4 = SC4, axis5 = SC5, axis6 = SC6, axis7 = SC7)) +
+  geom_alluvium()
+  facet_grid(cols = vars(Site),
+             rows = vars(Family),
+             space = "free",
+             scales = "free",
+             drop = TRUE) +
+  scale_fill_gradientn(name = "%",
+                      colours = rev(c("#30123BFF",
+                                      "#4662D7FF",
+                                      "darkgreen",
+                                      "#72FE5EFF",
+                                      "#C7EF34FF",
+                                      "#FABA39FF",
+                                      "#F66B19FF",
+                                      "#CB2A04FF",
+                                      "#7A0403FF")),
+                      values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5,
+                                                 5, 10, 25, 50, 75, 100)),
+                      breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00,
+                                 25.00, 50.00, 100.00),
+                      labels = scales::number_format(accuracy = 0.01),
+                      limits = c(0.01, 100),
+                      na.value = "#7A0403FF",
+                      trans = "log10") +
+  theme(panel.grid.major = element_line(color = "grey",
+                                        linewidth = 0.2,
+                                        linetype = 1),
+        axis.text.x = element_text(angle = 45,
+                                   vjust = 1,
+                                   hjust = 1,
+                                   size = 14),
+        axis.text.y = element_text(face = "italic",
+                                   size = 14),
+        strip.text.x = element_text(size = 14,
+                                    face = "bold"),
+        strip.text.y = element_text(angle = 0,
+                                    size = 14,
+                                    face = "bold"),
+        legend.position = "right",
+        legend.key.height = unit(3, "cm"),
+        axis.title = element_text(size = 16,
+                                  face = "bold")) +
+  labs(fill = "%",
+       x = "Replicatas",
+       y = "Taxa")
+
+# Export plot
+# ggsave(plot = tile_plot_sample,
+#        filename = paste0(figs_path, "/tile_plot_sample", "_",
+#                          Sys.Date(), ".pdf"),
+#        units = "cm",
+#        height = 35,
+#        width = 35,
+#        dpi = 1200)
+
+tile_plot_sample
+```
+
+## 6. Ecological Analysis: Biodiversity Metrics
+
+### Sampling Effort (Accumulation Curves)
+
+#### For all samples
+
+-   **Matrix creation.** Presence/absence transformation and computation of overall species accumulation curve.
+
+    ```{r}
+    # Transform abundances to binary data
+    sample_taxa_wider_jac <- 
+      sample_taxa_wider  %>%
+      mutate(across(c(3:ncol(.)), 
+                    jaccarize))
+
+    # Collector curve
+    accum_all <- 
+      specaccum(sample_taxa_wider_jac[3:ncol(sample_taxa_wider_jac)],
+                # method = "random",
+                method = "random")
+                # permutations = 999)
+
+    # Richness per site to tibble
+    accum_all_df <-
+      tibble(sample = accum_all$sites,
+             richness = accum_all$richness)
+
+    # Permutation's infos to tibble   
+    accum_all_perm_df <- 
+      accum_all$perm %>% 
+      reshape2::melt() %>% 
+      as_tibble() %>% 
+      rename(Var1 = "sample", 
+             Var2 = "permutation", 
+             value = "value")
+    ```
+
+-   **Plot rarefaction curves.** Analyze species accumulation to evaluate if sequencing depth was sufficient to capture site diversity.
+
+    ```{r}
+    collector_plot_all <-
+      accum_all_df %>% 
+      ggplot(aes(x = sample,
+                 y = richness)) +
+      geom_line(aes(x = sample,
+                    y = richness),
+                inherit.aes = FALSE, linewidth = 2,
+                col = all_colors, alpha = 0.70) +
+      geom_boxplot(data = accum_all_perm_df,
+                   aes(x = sample,
+                       y = value,
+                       group = sample),
+                   col = all_colors, fill = all_colors, notch = TRUE,
+                   alpha = 0.33, width = 0.5, outlier.shape = NA) +
+      geom_jitter(data = accum_all_perm_df,
+                  aes(x = sample,
+                      y = value),
+                  size = 0.01, width = 0.25, col = all_colors) +
+      scale_x_continuous(breaks = seq(1, max(accum_all_df$sample), by = 2)) +
+      scale_y_continuous(breaks = seq(0, max(accum_all_df$richness), by = 10)) +
+      theme(panel.background = element_rect(fill = "white", 
+                                            color = "grey"),
+            panel.grid = element_line(color = "grey60",
+                                      linewidth = 0.2, linetype = 1),
+            axis.text = element_text(size = 16),
+            axis.title = element_text(size = 20,
+                                      face = "bold")) +
+      labs(x = "samples",
+           y = "richness")
+
+    # Export plot for the paper
+    # ggsave(file = paste0(figs_path,"/", "collector_plot_all",
+    #                      "-", Sys.Date(), ".pdf", collapse = ""),
+    #        plot = collector_plot_all, 
+    #        width = 20, 
+    #        height = 12, 
+    #        units = "cm", 
+    #        dpi = 600)
+
+    collector_plot_all
+    ```
+
+#### For each site
+
+-   **Matrix creation.** Presence/absence transformation and computation of overall species accumulation curve.
+
+    ```{r}
+    # SC1
+    sc1_taxa_wider_jac <-
+    taxa_sample_wider_jac %>% 
+      filter(Local == "SC1")
+
+    accum_sc1 <- 
+      specaccum(sc1_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
+                method = "random",
+                permutations = 999)
+       
+    accum_sc1_df <- 
+      tibble("site" = "SC1",
+             "samples" = accum_sc1$sites,
+             "richness" = accum_sc1$richness,
+             "sd" = accum_sc1$sd)
+
+    # SC2
+    sc2_taxa_wider_jac <-
+    taxa_sample_wider_jac %>% 
+      filter(Local == "SC2")
+
+    accum_sc2 <- 
+      specaccum(sc2_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
+                method = "random",
+                permutations = 999)
+       
+    accum_sc2_df <- 
+      tibble("site" = "SC2",
+             "samples" = accum_sc2$sites,
+             "richness" = accum_sc2$richness,
+             "sd" = accum_sc2$sd)
+
+    # SC3
+    sc3_taxa_wider_jac <-
+    taxa_sample_wider_jac %>% 
+      filter(Local == "SC3")
+
+    accum_sc3 <- 
+      specaccum(sc3_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
+                method = "random",
+                permutations = 999)
+       
+    accum_sc3_df <- 
+      tibble("site" = "SC3",
+             "samples" = accum_sc3$sites,
+             "richness" = accum_sc3$richness,
+             "sd" = accum_sc3$sd)
+
+    #SC4
+    sc4_taxa_wider_jac <-
+    taxa_sample_wider_jac %>% 
+      filter(Local == "SC4")
+
+    accum_sc4 <- 
+      specaccum(sc4_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
+                method = "random",
+                permutations = 999)
+       
+    accum_sc4_df <- 
+      tibble("site" = "SC4",
+             "samples" = accum_sc4$sites,
+             "richness" = accum_sc4$richness,
+             "sd" = accum_sc4$sd)
+
+    #SC5
+    sc5_taxa_wider_jac <-
+    taxa_sample_wider_jac %>% 
+      filter(Local == "SC5")
+
+    accum_sc5 <- 
+      specaccum(sc5_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
+            method = "random",
+                permutations = 999)
+       
+    accum_sc5_df <- 
+      tibble("site" = "SC5",
+             "samples" = accum_sc5$sites,
+             "richness" = accum_sc5$richness,
+             "sd" = accum_sc5$sd)
+
+    #SC6
+    sc6_taxa_wider_jac <-
+    taxa_sample_wider_jac %>% 
+      filter(Local == "SC6")
+
+    accum_sc6 <- 
+      specaccum(sc6_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
+            method = "random",
+                permutations = 999)
+       
+    accum_sc6_df <- 
+      tibble("site" = "SC6",
+             "samples" = accum_sc6$sites,
+             "richness" = accum_sc6$richness,
+             "sd" = accum_sc6$sd)
+
+    #SC7
+    sc7_taxa_wider_jac <-
+    taxa_sample_wider_jac %>% 
+      filter(Local == "SC7")
+
+    accum_sc7 <- 
+      specaccum(sc7_taxa_wider_jac[3:ncol(taxa_sample_wider_jac)],
+                method = "random",
+                permutations = 999)
+       
+    accum_sc7_df <- 
+      tibble("site" = "SC7",
+             "samples" = accum_sc1$sites,
+             "richness" = accum_sc7$richness,
+             "sd" = accum_sc7$sd)
+        
+    # Combine and plot
+    combined_accum <- 
+      bind_rows(accum_sc1_df, accum_sc2_df, accum_sc3_df, accum_sc4_df,
+                accum_sc5_df, accum_sc6_df, accum_sc7_df) %>%
+      mutate(site = factor(site, levels = c("SC1", "SC2", "SC3", "SC4",
+                                            "SC5", "SC6", "SC7")))
+    ```
+
+-   **Plot rarefaction curves.** Analyze species accumulation to evaluate if sequencing depth was sufficient to capture site diversity.
+
+    ```{r}
+    collector_plot_sites <-
+      combined_accum %>%
+      ggplot(aes(x = samples,
+                 y = richness,
+                 colour = site)) +
+      geom_line(linewidth = 2, alpha = 0.7) +
+      geom_label_repel(data = combined_accum %>%
+                     arrange(desc(samples)) %>% 
+                     distinct(site, .keep_all = TRUE),
+                     aes(label = site,
+                         color = site),
+                     size = 7, fontface = "bold", nudge_x = 0.2,
+                     nudge_y = 1, fill = "white", box.padding = 1,
+                     point.padding = 0.5, segment.color = "grey50",
+                     show.legend = FALSE) +
+      scale_color_manual(values = site_colors) +
+      scale_x_continuous(breaks = seq(1, max(combined_accum$samples), by = 1)) +
+      scale_y_continuous(breaks = seq(0, max(combined_accum$richness), by = 10)) +
+      theme(panel.background = element_rect(fill = "white", 
+                                            color = "grey"),
+            panel.grid.major = element_line(color = "grey60",
+                                            linewidth = 0.2, linetype = 1),
+            panel.grid.minor.y = element_line(color = "grey60",
+                                              linewidth = 0.2, linetype = 1),
+            axis.text = element_text(size = 16),
+            axis.title = element_text(size = 20,
+                                      face = "bold"),
+            legend.position = "none") +
+      labs(x = "Samples",
+           y = "Richness")
+
+    # Export plot 
+    # ggsave(file = paste0(figs_path,"/", "collector_plot_all",
+    #                      "-", Sys.Date(), ".pdf", collapse = ""),
+    #        plot = collector_plot_sites, 
+    #        width = 20, 
+    #        height = 12, 
+    #        units = "cm", 
+    #        dpi = 600)
+
+    collector_plot_sites
+    ```
+
+### Alpha Diversity
+
+#### Indices Calculation
+
+-   **Calculate diversity indices.** Compute Shannon, Simpson, and Richness (Observed) metrics for each site/method.
+
+    ```{r}
+    # Metrics for each sample for eDNA
+    alpha_sample_tbl <- 
+      sample_taxa_wider %>%
+      rowwise() %>%
+      reframe(Sample,
+              Site, 
+              Observed = specnumber(c_across(3:ncol(sample_taxa_wider))),
+             Shannon = diversity(c_across(3:ncol(sample_taxa_wider)), index = "shannon"),
+             Simpson = diversity(c_across(3:ncol(sample_taxa_wider)), index = "simpson")) %>%
+      ungroup() %>%
+      pivot_longer(cols = c(Observed, 
+                            Shannon, 
+                            Simpson),
+                   names_to = "index") %>%
+      mutate(Method = "Metabarcoding") %>% 
+      print()
+      
+    # Metrics for each site for eDNA
+    alpha_site_tbl <- 
+      site_taxa_wider %>%
+      rowwise() %>%
+      reframe(Site,
+              Observed = specnumber(c_across(2:ncol(site_taxa_wider))),
+              Shannon = diversity(c_across(2:ncol(site_taxa_wider)), index = "shannon"),
+              Simpson = diversity(c_across(2:ncol(site_taxa_wider)), index = "simpson")) %>%
+      ungroup() %>%
+      pivot_longer(cols = c(Observed, 
+                            Shannon, 
+                            Simpson),
+                   names_to = "index") %>%
+      mutate(Method = "Metabarcoding") %>% 
+      print()
+
+    # Metrics for each site for traditional
+    alpha_traditional_tbl <- 
+      traditional_wider %>%
+      rowwise() %>%
+      reframe(Site,
+              Observed = specnumber(c_across(2:ncol(traditional_wider))),
+             Shannon = diversity(c_across(2:ncol(traditional_wider)), index = "shannon"),
+             Simpson = diversity(c_across(2:ncol(traditional_wider)), index = "simpson")
+             ) %>%
+      ungroup() %>%
+      pivot_longer(cols = c(Observed, 
+                            Shannon, 
+                            Simpson),
+                   names_to = "index") %>%
+      mutate(Method = "Traditional") %>% 
+      print()
+
+    # Bind rows for Site
+    alpha_site_methods <- 
+      alpha_traditional_tbl %>% 
+      bind_rows(alpha_site_tbl) %>% 
+      print()
+
+    # Bind row for Sample
+    alpha_sample_methods <-
+      alpha_traditional_tbl %>% 
+      bind_rows(alpha_sample_tbl) %>% 
+      print()
+    ```
+
+-   **Plot Barplot with** **Diversity Indices.** Compare alpha-diversity indexes among each method.
+
+    ```{r}
+    barplot_alpha_methods <-
+        alpha_site_methods %>% 
+        filter(index != "Shannon") %>% 
+        ggplot(aes(x = Site,
+                   y = value,
+                   fill = Site)) +
+        geom_col() +
+        geom_text(aes(label = round(value, 2)), vjust = -0.5) +
+        # geom_point(aes(fill = Sample)) +
+        facet_grid(rows = vars(index),
+                   cols = vars(Method),
+                   scales = "free",
+                   labeller = labeller(Method = c(Metabarcoding = "eDNA Metabarcoding",
+                                                  Traditional = "Métodos Tradicionais"), 
+                                       index = c(Observed = "Observado",
+                                                 Simpson = "Simpson"))) +
+        scale_fill_manual(values = site_colors) +
+        # stat_compare_means(method = "wilcox.test",
+        #                    paired = TRUE,
+        #                    method.args = list(alternative = "greater")) +
+        theme(panel.grid.major = element_line(color = "grey",
+                                              linewidth = 0.2,
+                                              linetype = 1),
+              axis.text = element_text(size = 14),
+              strip.text = element_text(size = 14,
+                                        face = "bold"),
+              legend.position = "none",
+              legend.key.height = unit(3, "cm"),
+              axis.title = element_text(size = 16,
+                                        face = "bold")) +
+        labs(x = "Local",
+             y = "Valor")
+
+    # Export plot
+    # ggsave(plot = barplot_alpha_methods, 
+    #        filename = paste0(figs_path, "/barplot_alpha_methods", "-",
+    #                          Sys.Date(), ".png", sep = ""),
+    #        units = "cm", 
+    #        height = 22.5, 
+    #        width = 20, 
+    #        dpi = 600)
+
+    barplot_alpha_methods
+    ```
+
+#### Statistical Comparison
+
+-   **Test for normality.** Check if diversity data follows a normal distribution (Shapiro-Wilk test) to decide on parametric vs. non-parametric tests.
+
+    ```{r}
+    alpha_methods %>% 
+      left_join(meta_data,
+                by = "Site") %>% 
+      relocate(Sample,
+               Site,
+               Elevation) %>% 
+      ggplot(aes(Elevation, ))
+    ```
+
+-   **Compare alpha diversity.** Perform Wilcoxon rank-sum tests to assess if there are significant differences in diversity between eDNA and traditional methods.
+
+    ```{r}
+    # Alpha-diversity Observed index
+    alpha_observed <-
+      alpha_methods %>% 
+      filter(index %in% "Observed",
+             Site != "SC5") %>% 
+      pivot_wider(names_from = c(Method),
+                  id_cols = Site,
+                  values_from = value)
+
+      wilcox.test(x = alpha_observed$Metabarcoding,
+                  y = alpha_observed$Traditional,
+                  paired = TRUE,
+                  alternative = "greater",
+                  conf.int = TRUE)
+    ```
+
+### Correlation
+
+-   Data
+
+    ```{r}
+    # corr_richness_elevation <-
+    alpha_sample_methods %>% 
+      filter(index == "Observed",
+             Method == "Metabarcoding") %>% 
+      left_join(meta_data,
+                by = "Site") %>%
+      relocate(Sample,
+               Site,
+               Elevation) %>% 
+      ggplot(aes(Elevation, value)) +
+      geom_point(aes(color = Site),
+                      size  = 3,
+                      width = 0.5) +
+      geom_smooth(method = "lm") +
+      geom_text_repel(aes(label = Sample),
+                      size = 5, 
+                      box.padding = 0.5,
+                      point.padding = 1
+                      ) +
+      scale_color_manual(values = site_colors) +
+      theme(panel.grid.major = element_line(color = "grey",
+                                            linewidth = 0.2,
+                                            linetype = 1),
+            axis.text = element_text(size = 14),
+            strip.text = element_text(size = 14,
+                                      face = "bold"),
+            legend.position = "none",
+            legend.key.height = unit(3, "cm"),
+            axis.title = element_text(size = 16,
+                                      face = "bold")) +
+      labs(x = "Elevation",
+           y = "Richness")
+
+    shapiro.test(corr_richness_elevation$value)
+
+     cor.test(corr_richness_elevation$value, 
+         corr_richness_elevation$Elevation, 
+         method = "spearman")
+    ```
+
+### Beta Diversity (Ordination)
+
+#### Data Preparation (Jaccard/Bray)
+
+-   **Data preparation for ordination.** Create a wide-format table (**`Samples x Taxa`**) with RRA values for vegan ordination.
+
+    ```{r}
+    # Convert the long table to a wide format (Samples x IDs)
+    taxa_sample_wider_PCoA <- 
+      taxa_sample_longer %>%
+      select(c(Site, 
+               Sample,
+               Taxon,
+               `%`)) %>%
+      pivot_wider(id_cols = c(Site,
+                              Sample),
+                  names_from = Taxon,
+                  values_from = `%`,
+                  values_fn = sum_uniq,
+                  names_sort = TRUE,
+                  names_prefix = "ID_") %>%
+      relocate(c(Site,
+                 Sample,
+                 starts_with("ID_"))) %>%
+      mutate(across(starts_with("ID_"), 
+                    \(x) replace_na(x, 0))) %>%
+      mutate("Local" = as.factor(Site)) %>% 
+      mutate("Amostra" = as.factor(Sample)) %>% 
+      print()
+        
+    # Prepare data for vegan and fix rownames
+    taxa_sample_wider_PCoA <- 
+      taxa_sample_wider_PCoA %>%
+      mutate("Sample number" = row_number()) %>%
+      relocate("Sample number") %>%
+      as.data.frame() %>% 
+      print()
+        
+    row.names(taxa_sample_wider_PCoA) <- 
+      taxa_sample_wider_PCoA$`Sample number`
+        
+    # Clean species names to avoid plotting issues
+    colnames(taxa_sample_wider_PCoA)[4:ncol(taxa_sample_wider_PCoA)] <- 
+      colnames(taxa_sample_wider_PCoA)[4:ncol(taxa_sample_wider_PCoA)] %>%
+      str_replace_all(pattern = " ", replacement = "_") %>%
+      str_replace_all(pattern = "\\.", replacement = "") %>%
+      str_replace_all(pattern = "\\(", replacement = "") %>%
+      str_replace_all(pattern = "\\)", replacement = "")
+    ```
+
+-   **Transform data.** Convert abundance matrices into distance matrices using Jaccard (presence/absence) or Bray-Curtis (abundance) indices.
+
+    ```{r}
+    # Filter data and create distance matrix
+    taxa_sample_wider_PCoA <- 
+      taxa_sample_wider_PCoA %>% 
+      select(where(~ any(. != 0)))
+
+    pcOa_dist <- 
+      vegan::vegdist(x = taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)],
+                                method = "jaccard",
+                                binary = TRUE)
+    ```
+
+#### PCoA & Vector Fitting
+
+-   **Run ordination (PCoA/NMDS).** Perform Principal Coordinates Analysis to visualize compositional differences between sites.
+
+    ```{r}
+    pcOa <- cmdscale(pcOa_dist, 
+                     eig = TRUE)
+
+    ordiplot(pcOa, 
+             display = 'sites', 
+             type = 'text')
+    ```
+
+-   **Fit environmental vectors.** Correlate environmental variables (e.g., elevation) with the ordination axes to interpret ecological drivers.
+
+    ```{r}
+    # Fit species vectors to the ordination
+    meta.spp.fit <- envfit(pcOa, 
+                           taxa_sample_wider_PCoA[,4:ncol(taxa_sample_wider_PCoA)], 
+                           permutations = 999)
+        
+    # Extract scores for significant species
+    sps_pvals <- 
+      tibble("IDs" = names(meta.spp.fit$vectors$pvals),
+             "p-value" = meta.spp.fit$vectors$pvals)
+                            
+    spp.scrs <- 
+      as.data.frame(scores(meta.spp.fit, 
+                           display = "vectors")) %>%
+      mutate("IDs" = rownames(.)) %>%
+      left_join(y = sps_pvals, 
+                by = "IDs")
+          
+    spp.scrs$IDs <- 
+      gsub("ID_", "",
+           spp.scrs$IDs)
+
+    spp.scrs$IDs <- gsub("_", " ",
+                         spp.scrs$IDs)
+          
+    sig.spp.scrs <- 
+      spp.scrs %>% 
+      filter(`p-value` <= 0.05)
+        
+    # Extract site scores and centroids
+    site.scrs <- 
+      as.data.frame(scores(pcOa,
+                           display = "sites"))
+
+    colnames(site.scrs) <- c("PCoA1",
+                             "PCoA2")
+
+    site.scrs <- 
+      site.scrs %>%
+      mutate("Sample number" = as.double(row.names(.))) %>%
+      left_join(y = taxa_sample_wider_PCoA[, c("Sample number",
+                                               "Local",
+                                               "Amostra")],
+                by = "Sample number")
+        
+    cent <- aggregate(cbind(PCoA1, PCoA2) ~ Local, 
+                      data = site.scrs, 
+                      FUN = "mean")
+        
+    # Calculate ellipses for plotting
+    ord <- ordiellipse(ord = pcOa,
+                       groups = taxa_sample_wider_PCoA$Local,
+                       display = "sites",
+                       kind = "ehull", 
+                       conf = 0.95, 
+                       label = TRUE)
+
+    df_ell <- data.frame() 
+
+    for(g in levels(as.factor(taxa_sample_wider_PCoA$Local))){
+      df_ell <- rbind(df_ell,cbind(as.data.frame(with(site.scrs[site.scrs$Local==g,],vegan:::veganCovEllipse(
+        ord[[g]]$cov,ord[[g]]$center,ord[[g]]$scale))),Local=g))
+        }
+    ```
+
+#### Visualization
+
+-   **Plot ordination.** Generate scatter plots of the PCoA results, coloring points by Site or Method.
+
+    ```{r}
+    percent_pcOa <- pcOa$eig / sum(pcOa$eig) * 100
+        
+    cores <- c("High" = "#3381b1", 
+               "Low" = "#E63946")
+        
+    # PCoA_site <- 
+      ggplot(data = site.scrs, 
+             aes(x = PCoA1, y 
+                 = PCoA2)) +
+    # # Ellipses
+    #   ggforce::geom_mark_ellipse(data = df_ell,
+    #                              aes(x = Dim1, 
+    #                                  y = Dim2, group = Local,
+    #                                  label = Local, 
+    #                                  col = Local, fill = Local),
+    #                                  inherit.aes = FALSE,
+    #                              alpha=0.10, linetype=2, 
+    #                              expand = 0, label.fontsize = 20,
+    #                              con.cap = 0.1) +
+    # Sample points
+      geom_point(aes(fill = Amostra, 
+                     col = Amostra, 
+                     group = Local, 
+                     shape = Local), 
+                 stroke = 0.5, 
+                 alpha = 0.75, 
+                 size = 3) +
+    # Sample labels
+      ggrepel::geom_text_repel(aes(label = Amostra), 
+                               size=6, direction = "both",
+                               segment.size = 0.25,
+                               segment.alpha=0.1, force = 3,
+                               max.overlaps = 100, 
+                               fontface = "bold") +
+      # Species vectors
+      geom_segment(data = sig.spp.scrs, 
+                   aes(x = 0, xend = Dim1, 
+                       y = 0, yend = Dim2),
+                   arrow = arrow(length = unit(0.1, "cm")),
+                   colour = "grey30", alpha = 0.5, lwd = 0.3) +
+      # Species labels
+      geom_text_repel(data = sig.spp.scrs, 
+                      aes(x=Dim1, y=Dim2, label = IDs),
+                      size = 3.5, alpha = 0.75, 
+                      segment.size = 0.25, 
+                      segment.alpha = 0.1, 
+                      max.overlaps = 25) +
+      # Centroids
+      geom_point(data = cent, 
+                 aes(x = PCoA1, 
+                     y = PCoA2, 
+                     fill = Local),
+                 size = 8, 
+                 colour = "#222222",
+                 alpha = 0.75, 
+                 shape  = 13) +
+      coord_fixed(expand = c(0.5)) +
+      theme(panel.grid.major = element_line(color = "grey", 
+                                            size = 0.2, 
+                                            linetype = 1),
+            axis.text = element_text(size = 17, 
+                                     color = "black"),
+            axis.title = element_text(size = 20, 
+                                      face = "bold"),
+            legend.position = "none") +
+      labs(x = paste0("PCoA1 (", 
+                      round(percent_pcOa, 2), "%)")[1],
+           y = paste0("PCoA2 (", 
+                  round(percent_pcOa, 2), "%)")[2]) 
+    # +
+      # scale_fill_manual(values = cores) +
+      # scale_colour_manual(values = cores)
+
+    # Exporting plot for the paper
+    ggsave(plot = PCoA_MCE_2, 
+           filename = paste0(figs_path, "/PCoA_all", "-",
+                             Sys.Date(), ".pdf", sep = ""),
+           units = "cm", 
+           height = 16.75, 
+           width = 16.75, 
+           dpi = 600)
+
+    PCoA_MCE_2
+    ```
