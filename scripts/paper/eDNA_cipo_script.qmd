@@ -445,12 +445,14 @@ editor_options:
           curated_results_rszd %>%
           group_by(Sample) %>%
           mutate("Sample total abundance" = sum(`ASV absolute abundance`),
-                 "Relative abundance on sample" = `ASV absolute abundance`/ `Sample total abundance` * 100) %>%
+                 "Relative abundance on sample" = `ASV absolute abundance`/ 
+                   `Sample total abundance` * 100) %>%
           group_by(`ASV header`, `Metadata 1`) %>% 
           mutate("ASV site abundance" = sum(`ASV absolute abundance`)) %>% 
           group_by(`Metadata 1`) %>% 
           mutate("Site total abundance" = sum(`ASV site abundance`),
-                 "Relative abundance on site" = `ASV site abundance`/ `Site total abundance` * 100) %>%
+                 "Relative abundance on site" = `ASV site abundance`/ 
+                   `Site total abundance` * 100) %>%
           relocate(`ASV header`, `Curated ID`, Sample, 
                  `ASV absolute abundance`, `Relative abundance on sample`, `Sample total abundance`, 
                  `ASV site abundance`, `Relative abundance on site`, `Site total abundance`) %>% 
@@ -672,7 +674,7 @@ editor_options:
                   values_from = Ocurrence) %>% 
       mutate(across(c(2:ncol(.)), ~ replace_na(., 0))) %>% 
           print()
-```
+    ```
 
 ### Dataset Merging: eDNA + Traditional
 
@@ -697,27 +699,12 @@ editor_options:
       select(-c(Site, Ocurrence)) %>% 
       unique() %>% 
       print()
-    
+
     # Export table
-    # write.csv(eDNA_traditional_methods_list,
-    #           paste0(tbl_path, "/eDNA_traditional_methods_list", "-",
-    #                  Sys.Date(), ".csv", sep = ""))
+    write.csv(eDNA_traditional_methods_list,
+              paste0(tbl_path, "/eDNA_traditional_methods_list", "-",
+                     Sys.Date(), ".csv", sep = ""))
     ```
-
--   **Taxonomy correction**
-
-    ```{r}
-    upd_eDNA_traditional_methods_list <-
-      read.csv(paste0(data_path, "/eDNA_traditional_methods_list-2026-05-12_corrigido.csv"), 
-               sep = ",",
-               check.names = FALSE) %>%
-      select(-c(1)) %>% 
-      as_tibble()
-    
-    anti_join(upd_eDNA_traditional_methods_list, eDNA_traditional_methods_list)
-    anti_join(eDNA_traditional_methods_list, upd_eDNA_traditional_methods_list)
-    ```
-
 
 ## 4. Descriptive Statistics & Sequencing QC
 
@@ -1503,82 +1490,53 @@ editor_options:
 ### Alluvial Plots
 
 ```{r}
-# Define factor Locals for plot
-# spp_levels <- 
-#   sort(unique(taxa_sample_longer$Taxon))
-# 
-# taxa_sample_wider
-
-# Convert the long table to a wide format (IDs & Samples x Sites)
-taxa_sample_wider_alluvial <- 
-  taxa_sample_longer %>%
-  select(c(Site, 
-           Sample,
-           Taxon,
-           `%`)) %>%
-  pivot_wider(id_cols = c(Taxon,
-                          Sample),
-              names_from = Site,
-              values_from = `%`,
-              values_fn = sum_uniq,
-              names_sort = TRUE) %>%
-  mutate_all(~replace(., is.na(.), 0)) %>% 
-  relocate(c(Taxon,
-             Sample)) %>%
+# Recalculate the percentages for Species and Site levels
+taxa_site_longer_alluvial <- 
+  taxa_site_longer %>% 
+  group_by(Site, 
+       Taxon) %>%
+  summarise(reads_Taxon = sum(Reads), 
+        .groups = "drop") %>%
+  group_by(Site) %>%
+  mutate(total_site = sum(reads_Taxon),
+     perc = reads_Taxon / total_site * 100) %>%
+  ungroup() %>%
   print()
 
-# Plot
-alluvial_plot_site <-
-taxa_sample_wider_alluvial %>%
-  mutate(Taxon = factor(Taxon,
-                        levels = rev(spp_levels))) %>%  
-  ggplot(aes(y = Taxon,
-             axis1 = SC1, axis2 = SC2, axis3 = SC3, axis4 = SC4, axis5 = SC5, axis6 = SC6, axis7 = SC7)) +
-  geom_alluvium()
-  facet_grid(cols = vars(Site),
-             rows = vars(Family),
-             space = "free",
-             scales = "free",
-             drop = TRUE) +
-  scale_fill_gradientn(name = "%",
-                      colours = rev(c("#30123BFF",
-                                      "#4662D7FF",
-                                      "darkgreen",
-                                      "#72FE5EFF",
-                                      "#C7EF34FF",
-                                      "#FABA39FF",
-                                      "#F66B19FF",
-                                      "#CB2A04FF",
-                                      "#7A0403FF")),
-                      values = scales::rescale(c(0, 0.01, 0.05, 0.25, 1, 2.5,
-                                                 5, 10, 25, 50, 75, 100)),
-                      breaks = c(0, 0.01, 0.05, 0.25, 1.00, 2.50, 5.00, 10.00,
-                                 25.00, 50.00, 100.00),
-                      labels = scales::number_format(accuracy = 0.01),
-                      limits = c(0.01, 100),
-                      na.value = "#7A0403FF",
-                      trans = "log10") +
+# Plot Species level
+# alluvial_plot_site <-
+taxa_site_longer_alluvial %>%
+  filter(Site %in% c("SC1", "SC2", 
+                     "SC3", "SC7")) %>%
+  ggplot(aes(x = Site,
+             y = perc,
+             alluvium = Taxon,
+             stratum = Taxon,
+             fill = Taxon,
+             label = Taxon)) +
+  geom_flow(stat = "alluvium",
+            lode.guidance = "frontback",
+            alpha = 0.6) +
+  geom_stratum(alpha = 0.8, width = 1/4) +
   theme(panel.grid.major = element_line(color = "grey",
                                         linewidth = 0.2,
                                         linetype = 1),
-        axis.text.x = element_text(angle = 45,
-                                   vjust = 1,
+        axis.text.x = element_text(vjust = 1,
                                    hjust = 1,
                                    size = 14),
-        axis.text.y = element_text(face = "italic",
-                                   size = 14),
+        axis.text.y = element_text(size = 14),
         strip.text.x = element_text(size = 14,
                                     face = "bold"),
-        strip.text.y = element_text(angle = 0,
-                                    size = 14,
+        strip.text.y = element_text(size = 14,
                                     face = "bold"),
-        legend.position = "right",
-        legend.key.height = unit(3, "cm"),
+        # legend.position = "right",
+        # legend.key.height = unit(3, "cm"),
         axis.title = element_text(size = 16,
                                   face = "bold")) +
-  labs(fill = "%",
-       x = "Replicatas",
-       y = "Taxa")
+  labs(title = "Taxa evolution between sites",
+       fill = "%",
+       x = "Site",
+       y = "Taxon")
 
 # Export plot
 # ggsave(plot = tile_plot_sample,
@@ -1589,8 +1547,160 @@ taxa_sample_wider_alluvial %>%
 #        width = 35,
 #        dpi = 1200)
 
-tile_plot_sample
+# Recalculate the percentages for Family and Site levels
+taxa_site_longer %>% 
+  group_by(Site,
+           Family) %>%
+  summarise(reads_Family = sum(Reads),
+            .groups = "drop") %>%
+  group_by(Site) %>%
+  mutate(total_site = sum(reads_Family),
+         perc = reads_Family / total_site * 100) %>%
+  ungroup() %>%
+
+# Plot Family level
+# alluvial_plot_site <-
+  filter(Site %in% c("SC1", "SC2", 
+                     "SC3", "SC7")) %>%
+  ggplot(aes(x = Site,
+             y = perc,
+             alluvium = Family,
+             stratum = Family,
+             fill = Family,
+             label = Family)) +
+  geom_flow(stat = "alluvium",
+            lode.guidance = "frontback",
+            alpha = 0.6) +
+  geom_stratum(alpha = 0.8, width = 1/4) +
+  theme(panel.grid.major = element_line(color = "grey",
+                                        linewidth = 0.2,
+                                        linetype = 1),
+        axis.text.x = element_text(vjust = 1,
+                                   hjust = 1,
+                                   size = 14),
+        axis.text.y = element_text(size = 14),
+        strip.text.x = element_text(size = 14,
+                                    face = "bold"),
+        strip.text.y = element_text(size = 14,
+                                    face = "bold"),
+        # legend.position = "right",
+        # legend.key.height = unit(3, "cm"),
+        axis.title = element_text(size = 16,
+                                  face = "bold")) +
+  labs(title = "Taxa evolution between sites",
+       fill = "%",
+       x = "Site",
+       y = "Family")
+
 ```
+
+```{r}
+# Plot Species level only for Order Siluriformes
+taxa_site_longer %>% 
+  filter(Order == "Siluriformes") %>%
+  group_by(Site,
+           Taxon) %>%
+  summarise(reads_Taxon = sum(Reads), 
+        .groups = "drop") %>%
+  group_by(Site) %>%
+  mutate(total_site = sum(reads_Taxon),
+     perc = reads_Taxon / total_site * 100) %>%
+  ungroup() %>%
+  filter(Site %in% c("SC1", "SC2", 
+                     "SC3", "SC7")) %>%
+  ggplot(aes(x = Site,
+             y = perc,
+             alluvium = Taxon,
+             stratum = Taxon,
+             fill = Taxon,
+             label = Taxon)) +
+  geom_flow(stat = "alluvium",
+            lode.guidance = "frontback",
+            alpha = 0.6) +
+  geom_stratum(alpha = 0.8, width = 1/4) +
+  # Labels
+  geom_label(stat = "stratum",
+             aes(label = after_stat(stratum)),
+             size = 3,
+             fill = "white",
+             alpha = 0.7,
+             label.size = 0,
+             label.padding = unit(0.15, "lines")) +
+  theme(panel.grid.major = element_line(color = "grey",
+                                        linewidth = 0.2,
+                                        linetype = 1),
+        axis.text.x = element_text(vjust = 1,
+                                   hjust = 1,
+                                   size = 14),
+        axis.text.y = element_text(size = 14),
+        strip.text.x = element_text(size = 14,
+                                    face = "bold"),
+        strip.text.y = element_text(size = 14,
+                                    face = "bold"),
+        axis.title = element_text(size = 16,
+                                  face = "bold"),
+        legend.position = "none") +
+  labs(title = "Taxa changes between sites (Siluriformes)",
+       # fill = "%",
+       x = "Site",
+       y = "Reads abundance")
+
+# Export plot
+# ggsave(plot = tile_plot_sample,
+#        filename = paste0(figs_path, "/tile_plot_sample", "_",
+#                          Sys.Date(), ".pdf"),
+#        units = "cm",
+#        height = 35,
+#        width = 35,
+#        dpi = 1200)
+
+# Recalculate the percentages for Family and Site levels
+taxa_site_longer %>% 
+  group_by(Site,
+           Family) %>%
+  summarise(reads_Family = sum(Reads),
+            .groups = "drop") %>%
+  group_by(Site) %>%
+  mutate(total_site = sum(reads_Family),
+         perc = reads_Family / total_site * 100) %>%
+  ungroup() %>%
+
+# Plot Family level
+# alluvial_plot_site <-
+  filter(Site %in% c("SC1", "SC2", 
+                     "SC3", "SC7")) %>%
+  ggplot(aes(x = Site,
+             y = perc,
+             alluvium = Family,
+             stratum = Family,
+             fill = Family,
+             label = Family)) +
+  geom_flow(stat = "alluvium",
+            lode.guidance = "frontback",
+            alpha = 0.6) +
+  geom_stratum(alpha = 0.8, width = 1/4) +
+  theme(panel.grid.major = element_line(color = "grey",
+                                        linewidth = 0.2,
+                                        linetype = 1),
+        axis.text.x = element_text(vjust = 1,
+                                   hjust = 1,
+                                   size = 14),
+        axis.text.y = element_text(size = 14),
+        strip.text.x = element_text(size = 14,
+                                    face = "bold"),
+        strip.text.y = element_text(size = 14,
+                                    face = "bold"),
+        # legend.position = "right",
+        # legend.key.height = unit(3, "cm"),
+        axis.title = element_text(size = 16,
+                                  face = "bold")) +
+  labs(title = "Taxa evolution between sites",
+       fill = "%",
+       x = "Site",
+       y = "Family")
+
+```
+
 
 ## 6. Ecological Analysis: Biodiversity Metrics
 
